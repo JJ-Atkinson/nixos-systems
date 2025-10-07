@@ -39,7 +39,7 @@ in
                "/etc/nixos/"];
       inhibitsSleep = true;
       timerConfig = {
-        OnCalendar = "00:22";
+        OnCalendar = "20:00";
         Persistent = true;
       };
       checkOpts = ["--read-data-subset=10%"];

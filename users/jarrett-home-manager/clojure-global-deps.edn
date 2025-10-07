@@ -1,0 +1,219 @@
+;; The deps.edn file describes the information needed to build a classpath.
+;;
+;; When using the `clojure` or `clj` script, there are several deps.edn files
+;; that are combined:
+;; - install-level
+;; - user level (this file)
+;; - project level (current directory when invoked)
+;;
+;; For all attributes other than :paths, these config files are merged left to
+;; right.
+;; Only the last :paths is kept and others are dropped.
+
+{;; Paths
+ ;;   Directories in the current project to include in the classpath
+ ;; :paths ["src"]
+ ;; External dependencies :deps {
+ ;;   org.clojure/clojure {:mvn/version "1.10.1"}
+ ;; }
+ ;; Aliases
+ ;;   resolve-deps aliases (-R) affect dependency resolution, options:
+ ;;     :extra-deps - specifies extra deps to add to :deps :override-deps -
+ ;;     specifies a coordinate to use instead of that in :deps
+ ;;     :default-deps - specifies a coordinate to use for a lib if one
+ ;;     isn't found
+ ;;   make-classpath aliases (-C) affect the classpath generation, options:
+ ;;     :extra-paths - vector of additional paths to add to the classpath
+ ;;     :classpath-overrides - map of lib to path that overrides the result
+ ;;     of resolving deps
+ ;; :aliases {
+ ;;   :deps {:extra-deps {org.clojure/tools.deps.alpha {:mvn/version
+ ;;   "0.7.541"}}}
+ ;;   :test {:extra-paths ["test"]}
+ ;; }
+ ;; Provider attributes :mvn/repos {
+ ;;   "central" {:url "https://repo1.maven.org/maven2/"}
+ ;;   "clojars" {:url "https://repo.clojars.org/"}
+ ;; }
+ :mvn/repos {;"datomic-cloud"       {:url
+             ;"s3://datomic-releases-1fc2183a/maven/releases"}
+             "cognitect-dev-tools"
+               {:url "https://dev-tools.cognitect.com/maven/releases"}},
+ :aliases
+   {:rebl {:extra-deps {com.cognitect/rebl {:local/root
+                                              "/home/jarrett/rebl-0.9.242.jar"},
+                        org.clojure/core.async {:mvn/version "1.3.610"},
+                        org.openjfx/javafx-fxml {:mvn/version "11.0.1"},
+                        org.openjfx/javafx-controls {:mvn/version "11.0.1"},
+                        org.openjfx/javafx-swing {:mvn/version "11.0.1"},
+                        org.openjfx/javafx-base {:mvn/version "11.0.1"},
+                        org.openjfx/javafx-web {:mvn/version "11.0.1"},
+                        ;; deps for file datafication (REBL 0.9.149 or
+                        ;; later)
+                        org.clojure/data.csv {:mvn/version "1.0.0"},
+                        org.clojure/data.json {:mvn/version "1.0.0"},
+                        org.yaml/snakeyaml {:mvn/version "1.27"}},
+           :main-opts ["-m" "cognitect.rebl"]},
+    :codox {:exec-args {:source-paths ["src/main"]},
+            :exec-fn codox.main/generate-docs,
+            :extra-deps {codox/codox {:mvn/version "0.10.8"}}},
+    ;; when using cursive requires using "clojure.main", *not* nrepl.
+    :greveal
+      {:extra-deps {vlaaad/reveal {:mvn/version "1.1.171"}},
+       ;:ns-default vlaaad.reveal
+       ;:exec-fn    repl
+       :jvm-opts
+         ["-Dvlaaad.reveal.prefs={:theme,:light,:font-family,\"https://ff.static.1001fonts.net/u/b/ubuntu.mono.ttf\",:font-size,18}"],
+       :main-opts ["-m" "vlaaad.reveal" "repl"]},
+    :spyscope {:extra-deps {vvvvalvalval/scope-capture {:mvn/version "0.3.2"}}},
+    :malli {:extra-deps {metosin/malli {:mvn/version "0.4.0"}}},
+    :flow-storm/client-lib {:extra-deps {com.github.jpmonettas/flow-storm-dbg
+                                           {:mvn/version "3.3.315"}}},
+    :flow-storm/server-main {:extra-deps {jpmonettas/flow-storm-debugger
+                                            {:mvn/version "0.6.0"}},
+                             :main-opts ["-m" "flow-storm-debugger.main"]},
+    :local/jrt {:extra-deps {com.jordanrivertechnology/rubric
+                               {:local/root "/home/jarrett/code/jra/rubric"},
+                             com.jordanrivertechnology/workshop
+                               {:local/root
+                                  "/home/jarrett/code/jra/workshop"}}},
+    :local/babashka {:extra-deps {babashka/fs {:mvn/version "0.3.17"},
+                                  babashka/process {:mvn/version "0.4.16"},
+                                  org.babashka/http-client {:mvn/version
+                                                              "0.1.4"}}},
+    :local/devtools
+      {:extra-deps
+         {com.gfredericks/debug-repl {:mvn/version "0.0.12"},
+          fulcrologic/fulcro-spec {:mvn/version "3.1.12"},
+          io.github.nubank/morse {:git/sha "7a85e46",
+                                  :git/tag "v2023.04.27.01"},
+          dev.freeformsoftware/portal-test-reporter
+            {:git/url "https://github.com/JJ-Atkinson/portal-test-reporter.git",
+             :sha "4862723d4c53ea66347f16e16d8cb51143555137"},
+          compliment/compliment
+            {:git/url "https://github.com/alexander-yakushev/compliment.git",
+             :sha "c251ac9c722141c67dbafaa3389e06d49479ba4a"},
+          ; compliment/compliment {:local/root
+          ; "/home/jarrett/code/personal/compliment"}
+          jarrett/devtools
+            {:local/root
+               "/home/jarrett/code/personal/jarrett-personal-dev-tools"},
+          io.github.tonsky/clj-reload {:mvn/version "0.7.0"}
+          lambdaisland/deep-diff2 {:mvn/version "2.11.216"},
+          djblue/portal {:mvn/version "0.46.0"}},
+       :override-deps {org.clojure/tools.namespace {:mvn/version "1.3.0"}}},
+    :local/sablono
+      {:override-deps
+         {sablono/sablono
+            {:local/root
+               "/home/jarrett/code/personal/sablono/target/sablono-0.9.0-SNAPSHOT.jar"}}},
+    :local/fulcro {:override-deps {com.fulcrologic/fulcro
+                                     {:local/root
+                                        "/home/jarrett/code/jra/fulcro"}}},
+    :local/fulcro-css {:override-deps
+                         {com.fulcrologic/fulcro-garden-css
+                            {:local/root
+                               "/home/jarrett/code/oss/fulcro-garden-css"}}},
+    :local/integrant {:override-deps
+                        {integrant/integrant
+                           {:local/root "/home/jarrett/code/jra/integrant"}}},
+    :local/fulcro-rad {:override-deps
+                         {com.fulcrologic/fulcro-rad
+                            {:exclusions [org.clojure/clojurescript],
+                             :local/root
+                               "/home/jarrett/code/fulcro-oss/fulcro-rad"}}},
+    :local/fulcro-rad-demo
+      {:override-deps
+         {com.fulcrologic/fulcro-rad-demo
+            {:local/root
+               "/home/jarrett/code-projects/fulcro-oss/fulcro-rad-demo"}}},
+    :local/fulcro-rad-semantic-ui
+      {:override-deps
+         {com.fulcrologic/fulcro-rad-semantic-ui
+            {:local/root
+               "/home/jarrett/code-projects/fulcro-oss/fulcro-rad-semantic-ui"}}},
+    :meander {:extra-deps {meander/epsilon {:mvn/version "0.0.650"}}},
+    ;; Practicalli
+    ;; https://github.com/practicalli/clojure-deps-edn/blob/live/deps.edn
+    ;; Reveal - read evaluate visualize loop
+    ;; A REPL environment with data visualization and exploration
+    ;; http://practicalli.github.io/clojure/clojure-tools/data-browsers/reveal.html
+    ;; clojure -M:inspect/reveal clojure -X:inspect/reveal. Run with theme
+    ;; / font changes: Clojure -M:inspect/reveal-light. Use with rebel repl
+    ;; by adding and using tap> clojure -M:inspect/reveal:repl/rebel
+    ;; clojure -M:inspect/reveal:rebel -J-Dvlaaad.reveal.prefs='{:theme
+    ;; :light :font-family "Ubuntu Mono" :font-size 16}'
+    :inspect/reveal {:exec-fn repl,
+                     :extra-deps {vlaaad/reveal {:mvn/version "1.3.196"}},
+                     :main-opts ["-m" "vlaaad.reveal" "repl"],
+                     :ns-default vlaaad.reveal},
+    :inspect/reveal-light
+      {:exec-fn repl,
+       :extra-deps {vlaaad/reveal {:mvn/version "1.3.196"}},
+       :jvm-opts
+         ["-Dvlaaad.reveal.prefs={:theme,:light,:font-family,\"https://ff.static.1001fonts.net/u/b/ubuntu.mono.ttf\",:font-size,18}"],
+       :main-opts ["-m" "vlaaad.reveal" "repl"],
+       :ns-default vlaaad.reveal},
+    :inspect/reveal-light-dep
+      {:extra-deps {com.phronemophobic/reveal-treemap {:mvn/version "0.1.4"},
+                    vlaaad/reveal {:mvn/version "1.3.280"}},
+       :jvm-opts
+         ["-Dvlaaad.reveal.prefs={:theme,:light,:font-family,\"https://ff.static.1001fonts.net/u/b/ubuntu.mono.ttf\",:font-size,18}"]},
+    ;; rebel readline with reveal data visualization
+    ;; clojure -M:inspect/reveal-rebel
+    :inspect/reveal-rebel
+      {:extra-deps {com.bhauman/rebel-readline {:mvn/version "0.1.4"},
+                    vlaaad/reveal {:mvn/version "1.3.196"}},
+       :main-opts
+         ["-e"
+          "(require,'rebel-readline.core),(require,'rebel-readline.clojure.line-reader),(require,'rebel-readline.clojure.service.local),(require,'rebel-readline.clojure.main),(require,'vlaaad.reveal)(rebel-readline.core/with-line-reader,(rebel-readline.clojure.line-reader/create,(rebel-readline.clojure.service.local/create)),(vlaaad.reveal/repl,:prompt,(fn,[]),:read,(rebel-readline.clojure.main/create-repl-read)))"]},
+    ;; clojure -M:inspect/reveal-light-rebel
+    :inspect/reveal-light-rebel
+      {:extra-deps {com.bhauman/rebel-readline {:mvn/version "0.1.4"},
+                    vlaaad/reveal {:mvn/version "1.3.196"}},
+       :jvm-opts
+         ["-Dvlaaad.reveal.prefs={:theme,:light,:font-family,\"https://ff.static.1001fonts.net/u/b/ubuntu.mono.ttf\",:font-size,16}"],
+       :main-opts
+         ["-e"
+          "(require,'rebel-readline.core),(require,'rebel-readline.clojure.line-reader),(require,'rebel-readline.clojure.service.local),(require,'rebel-readline.clojure.main),(require,'vlaaad.reveal)(rebel-readline.core/with-line-reader,(rebel-readline.clojure.line-reader/create,(rebel-readline.clojure.service.local/create)),(vlaaad.reveal/repl,:prompt,(fn,[]),:read,(rebel-readline.clojure.main/create-repl-read)))"]},
+    ;; Not sending all evaluations to Reveal
+    ;; It does send tap> results to Reveal
+    ;; :repl/reveal-rebel-nrepl
+    ;; {:extra-deps {nrepl/nrepl                {:mvn/version "0.8.3"}
+    ;;               cider/cider-nrepl          {:mvn/version "0.25.9"}
+    ;;               vlaaad/reveal              {:mvn/version "1.3.196"}
+    ;;               com.bhauman/rebel-readline {:mvn/version "0.1.4"}}
+    ;;  :jvm-opts
+    ;;  ["-Dvlaaad.reveal.prefs={:theme,:light,:font-family,\"https://ff.static.1001fonts.net/u/b/ubuntu.mono.ttf\",:font-size,16}"]
+    ;;  :main-opts  ["-m" "nrepl.cmdline"
+    ;;               "--middleware"
+    ;;               "[cider.nrepl/cider-middleware,vlaaad.reveal.nrepl/middleware]"
+    ;;               "-f" "rebel-readline.main/-main"]}
+    :inspect/reveal-local ;; Hacking the project
+      {:extra-deps
+         {vlaaad/reveal
+            {:local/root
+               "/home/practicalli/projects/clojure/visualization/reveal/"}},
+       :main-opts ["-m" "vlaaad.reveal" "repl"]},
+    ;; Reveal REPL with nrepl server, connect to from a Clojure aware
+    ;; editor clj -M:inspect/reveal-nrepl
+    :inspect/reveal-nrepl {:extra-deps {nrepl/nrepl {:mvn/version "0.8.3"},
+                                        vlaaad/reveal {:mvn/version "1.3.196"}},
+                           :main-opts [;"-m" "nrepl.cmdline"
+                                       "--middleware"
+                                       "[vlaaad.reveal.nrepl/middleware]"]},
+    ;; Light version of :inspect/reveal-nrepl
+    :inspect/reveal-light-nrepl
+      {:extra-deps {nrepl/nrepl {:mvn/version "0.8.3"},
+                    vlaaad/reveal {:mvn/version "1.3.196"}},
+       :jvm-opts
+         ["-Dvlaaad.reveal.prefs={:theme,:light,:font-family,\"https://ff.static.1001fonts.net/u/b/ubuntu.mono.ttf\",:font-size,16}"],
+       :main-opts ["-m" "nrepl.cmdline" "--middleware"
+                   "[vlaaad.reveal.nrepl/middleware]"]},
+    :tyba {:extra-deps {cider/cider-nrepl {:mvn/version "0.36.0"},
+                        cider/orchard {:mvn/version "0.23.2"},
+                        com.datomic/dev-local {:mvn/version "1.0.243"},
+                        nrepl/nrepl {:mvn/version "0.8.3"},
+                        refactor-nrepl/refactor-nrepl {:mvn/version "3.6.0"}},
+           :jvm-opts ["-XX:-OmitStackTraceInFastThrow"]}}}
+

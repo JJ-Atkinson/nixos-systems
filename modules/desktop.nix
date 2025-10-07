@@ -1,4 +1,4 @@
-{nixpkgs, ...} : {
+{nixpkgs, lib, ...} : {
   # Enable the X11 windowing system.
   services.xserver.enable = true;
 
@@ -68,6 +68,13 @@
   services.yubikey-agent.enable = true;
   services.pcscd.enable = true;
   hardware.gpgSmartcards.enable = true;
+  
+
+  # disable the root gnome keyring - this must be re-enabled by home-manager
+  # this is because there's no root way to disable the gnome-keyring ssh auth sock
+  # but there is a way in home manager to boot gn-kr without ssh support. 
+  services.gnome.gnome-keyring.enable = lib.mkForce false;
+  security.pam.services.login.enableGnomeKeyring = lib.mkForce false;
 
   services.udev.extraRules = ''
       ACTION=="remove",\

@@ -209,6 +209,25 @@ in {
     components = ["pkcs11" "secrets"];
   };
 
+  xdg.desktopEntries = {
+    deezer-firefox = {
+      name = "Deezer";
+      exec = "firefox --new-instance --profile /home/jarrett/.mozilla/firefox/deezer --new-window \"https://www.deezer.com\"";
+      icon = "audio-x-generic";
+      categories = ["AudioVideo" "Audio" "Player"];
+      startupNotify = true;
+      type = "Application";
+      terminal = false;
+    };
+
+    sys-hibernate = {
+      name = "System Hibernate";
+      exec = "systemctl hibernate";
+      terminal = false;
+      type = "Application";
+    };
+  };
+
   # Let Home Manager install and manage itself.
   programs.home-manager.enable = true;
 }

@@ -203,7 +203,8 @@ in {
   };
 
   # Re-enable gnome keyring, which is turned off in configuration.nix. The non-ssh
-  # functionality is still required by some apps.
+  # functionality is still required by some apps. See desktop.nix for where 
+  # the root version of gn-kr is disabled
   services.gnome-keyring = {
     enable = true;
     components = ["pkcs11" "secrets"];

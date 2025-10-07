@@ -1,0 +1,6 @@
+.portal/
+.vscode/
+result
+.direnv/
+.clj-kondo/.cache/
+.lsp/.cache/

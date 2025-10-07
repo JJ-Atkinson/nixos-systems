@@ -1,0 +1,54 @@
+
+
+nnoremap J :action :cursive.actions.paredit/forward<CR>
+nnoremap K :action :cursive.actions.paredit/backward<CR>
+
+nnoremap w :action EditorSelectWord<CR>
+vnoremap w :action EditorSelectWord<CR>
+onoremap w :action EditorSelectWord<CR>
+nnoremap W :action EditorUnSelectWord<CR>
+vnoremap W :action EditorUnSelectWord<CR>
+onoremap W :action EditorUnSelectWord<CR>
+
+
+nnoremap = :action ReformatCode<CR>
+vnoremap = :action ReformatCode<CR>
+
+nnoremap s :action SaveAll<CR>
+nnoremap S :action :cursive.actions.paredit/splice<CR>
+
+nnoremap t :action Back<CR>
+nnoremap T :action Forward<CR>
+
+nnoremap b :action GotoDeclaration<CR>
+
+nnoremap v :action IntroduceVariable<CR>
+
+nnoremap q :action QuickJavaDoc<CR>
+nnoremap Q :action QuickImplementations<CR>
+
+nnoremap ( :action Macro.:macro/start-paren<CR>
+nnoremap [ :action Macro.:macro/start-square<CR>
+nnoremap { :action Macro.:macro/start-curl<CR>
+
+nnoremap H :action :cursive.actions.paredit/barf-forwards<CR>
+nnoremap L :action :cursive.actions.paredit/slurp-forwards<CR>
+
+
+nnoremap U :action $Redo<CR>
+
+nnoremap F :action AceAction<CR>
+
+nnoremap m :action :cursive.actions.paredit/move-form-down<CR>
+nnoremap M :action :cursive.actions.paredit/move-form-up<CR>
+
+nnoremap z :action :cursive.repl.actions/run-top-sexp<CR>
+vnoremap z :action :cursive.repl.actions/run-top-sexp<CR>
+nnoremap Z :action Macro.:macro/super-eval<CR>
+vnoremap Z :action Macro.:macro/super-eval<CR>
+
+
+nnoremap ; :action CommentByLineComment<CR>
+
+
+

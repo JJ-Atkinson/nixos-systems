@@ -53,6 +53,7 @@
         ./modules/networking.nix
         ./modules/ssh-access.nix
         ./modules/tailscale.nix
+        ./modules/pgadmin.nix
 
         ./users/common.nix
         ./users/jarrett.nix

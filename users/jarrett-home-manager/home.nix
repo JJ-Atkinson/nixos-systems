@@ -37,7 +37,7 @@ in {
     nixpkgsUnstable.ghostty
     alacritty
     nil
-    nixfmt
+    nixfmt-rfc-style
     nixpkgsUnstable.ollama
     element-desktop
     github-desktop
@@ -57,7 +57,7 @@ in {
     nixpkgsUnstable.proton-pass
     nixpkgsUnstable.imagemagick
     transmission_4-gtk
-    nixpkgsUnstable.bambu-studio
+    # nixpkgsUnstable.bambu-studio
 
 
     wineWowPackages.stable

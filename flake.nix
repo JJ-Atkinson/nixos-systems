@@ -10,6 +10,10 @@
     flake-utils.url = "github:numtide/flake-utils";
     deploy.url = "github:serokell/deploy-rs";
 
+    claude-desktop.url = "github:k3d3/claude-desktop-linux-flake";
+    claude-desktop.inputs.nixpkgs.follows = "nixpkgs";
+    claude-desktop.inputs.flake-utils.follows = "flake-utils";
+
     home-manager = {
       url = "github:nix-community/home-manager/release-25.05";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -24,6 +28,7 @@
       sops-nix,
       nixos-hardware,
       home-manager,
+      claude-desktop,
       ...
     }@inputs:
     let
@@ -43,6 +48,7 @@
       specialArgs = {
         nixpkgs = nixpkgsStable;
         nixpkgsUnstable = nixpkgsUnstable;
+        claude-desktop = claude-desktop;
         inherit inputs nixos-hardware;
       };
     in
@@ -58,8 +64,11 @@
           ./systems/nixos/syncthing.nix
           ./modules/btrfs-scrub.nix
           ./modules/desktop.nix
+          # ./modules/desktop-kde.nix
+          ./modules/virtual-machines.nix
           ./modules/docker.nix
           ./modules/etc.nix
+          ./modules/vu-driver.nix
           ./modules/networking.nix
           ./modules/ssh-access.nix
           ./modules/tailscale.nix
@@ -98,6 +107,7 @@
           nixpkgsStable.ssh-to-pgp
           nixpkgsStable.age
           nixpkgsStable.deploy-rs
+          nixpkgsUnstable.claude-code
         ];
       };
     };

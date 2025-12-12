@@ -1,4 +1,4 @@
-{ config, nixpkgs, nixpkgsUnstable, environment, lib, ... }:
+{ config, nixpkgs, nixpkgsUnstable, claude-desktop, environment, lib, ... }:
 
 let 
   # system-jdk = (nixpkgsUnstable.jdk25.override { enableJavaFX = true; });
@@ -57,8 +57,17 @@ in {
     nixpkgsUnstable.proton-pass
     nixpkgsUnstable.imagemagick
     transmission_4-gtk
-    # nixpkgsUnstable.bambu-studio
+    claude-desktop.packages.x86_64-linux.claude-desktop
+    nixpkgsUnstable.claude-code
+    nixpkgsUnstable.appimage-run
 
+    # gnome apps
+    nixpkgsUnstable.resources
+    nixpkgsUnstable.gnome-graphs
+    nixpkgsUnstable.tangram
+    nixpkgsUnstable.video-trimmer
+    nixpkgsUnstable.warp
+    nixpkgsUnstable.gnome-boxes
 
     wineWowPackages.stable
     winetricks
@@ -87,6 +96,7 @@ in {
     unzip
 
     nixpkgsUnstable.lazydocker
+    openscad
 
   ];
   # This value determines the Home Manager release that your
@@ -203,24 +213,20 @@ in {
   };
 
   # Re-enable gnome keyring, which is turned off in configuration.nix. The non-ssh
-  # functionality is still required by some apps. See desktop.nix for where 
+  # functionality is still required by some apps. See desktop.nix for where
   # the root version of gn-kr is disabled
   services.gnome-keyring = {
     enable = true;
     components = ["pkcs11" "secrets"];
   };
 
-  xdg.desktopEntries = {
-    deezer-firefox = {
-      name = "Deezer";
-      exec = "firefox --new-instance --profile /home/jarrett/.mozilla/firefox/deezer --new-window \"https://www.deezer.com\"";
-      icon = "audio-x-generic";
-      categories = ["AudioVideo" "Audio" "Player"];
-      startupNotify = true;
-      type = "Application";
-      terminal = false;
-    };
+  # Enable KWallet for KDE application secrets
+  # SSH remains handled by GPG agent (see SSH_AUTH_SOCK above)
+  # services.kwalletd = {
+  #   enable = true;
+  # };
 
+  xdg.desktopEntries = {
     sys-hibernate = {
       name = "System Hibernate";
       exec = "systemctl hibernate";

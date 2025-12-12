@@ -2,24 +2,10 @@
   # Enable the X11 windowing system.
   services.xserver.enable = true;
 
-  # Enable the GNOME Desktop Environment.
-  services.xserver.displayManager.gdm.enable = true;
-  services.xserver.desktopManager.gnome.enable = true;
-
-  # https://discourse.nixos.org/t/how-to-set-fractional-scaling-via-nix-configuration-for-gnome-wayland/56774
-  # fractional scaling enable?
-  services.xserver = {
-    displayManager.gdm = {
-      wayland = true;
-    };
-    desktopManager.gnome = {
-      # extraGSettingsOverridePackages = [ pkgs.mutter ];
-      extraGSettingsOverrides = ''
-        [org.gnome.mutter]
-        experimental-features=['scale-monitor-framebuffer']
-      '';
-    };
-  };
+  # Enable the KDE Plasma Desktop Environment.
+  services.displayManager.sddm.enable = true;
+  services.displayManager.sddm.wayland.enable = true;
+  services.desktopManager.plasma6.enable = true;
 
   
   
@@ -70,11 +56,6 @@
   hardware.gpgSmartcards.enable = true;
   
 
-  # disable the root gnome keyring - this must be re-enabled by home-manager
-  # this is because there's no root way to disable the gnome-keyring ssh auth sock
-  # but there is a way in home manager to boot gn-kr without ssh support. 
-  services.gnome.gnome-keyring.enable = lib.mkForce false;
-  security.pam.services.login.enableGnomeKeyring = lib.mkForce false;
 
   services.udev.extraRules = ''
       ACTION=="remove",\
@@ -100,8 +81,4 @@
     enable = true;
     enable32Bit = true;
   };
-
-  # https://flathub.org/en/setup/NixOS
-  services.flatpak.enable = true;
-  # flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 }

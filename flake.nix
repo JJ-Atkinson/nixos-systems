@@ -9,6 +9,9 @@
     nixos-hardware.url = "github:NixOS/nixos-hardware";
     flake-utils.url = "github:numtide/flake-utils";
     deploy.url = "github:serokell/deploy-rs";
+    ucodenix.url = "github:e-tho/ucodenix";
+    disko.url = "github:nix-community/disko";
+    disko.inputs.nixpkgs.follows = "nixpkgs";
 
     claude-desktop.url = "github:k3d3/claude-desktop-linux-flake";
     claude-desktop.inputs.nixpkgs.follows = "nixpkgs";
@@ -29,6 +32,8 @@
       nixos-hardware,
       home-manager,
       claude-desktop,
+      ucodenix,
+      disko,
       ...
     }@inputs:
     let
@@ -98,9 +103,57 @@
         ];
       };
 
-      deploy = import ./deploy.nix inputs;
+      nixosConfigurations.nixos-framework = nixpkgs.lib.nixosSystem {
+        inherit system specialArgs;
+        modules = [
+          sops-nix.nixosModules.sops
+          nixos-hardware.nixosModules.framework-amd-ai-300-series
+          ucodenix.nixosModules.default
+          disko.nixosModules.disko
+          ./systems/nixos-framework/disko.nix
+          # ./systems/nixos-framework/fs-opts.nix # Replaced by disko.nix
+          ./systems/nixos-framework/hw-opts.nix
+          ./systems/nixos-framework/etc.nix
+          # ./systems/nixos-framework/std-backup-restic.nix # Disabled until age key is set up
+          ./systems/nixos-framework/syncthing.nix
+          ./modules/btrfs-scrub.nix
+          ./modules/desktop.nix
+          # ./modules/desktop-kde.nix
+          ./modules/virtual-machines.nix
+          ./modules/docker.nix
+          ./modules/etc.nix
+          ./modules/vu-driver.nix
+          ./modules/networking.nix
+          ./modules/ssh-access.nix
+          ./modules/tailscale.nix
 
-      devShell.${system} = nixpkgsStable.mkShell {
+          ./users/common.nix
+          ./users/jarrett.nix
+
+          # One small module to set the NixOS option for unfree
+          (
+            { ... }:
+            {
+              nixpkgs.config.allowUnfree = true;
+            }
+          )
+
+          home-manager.nixosModules.home-manager
+          {
+            home-manager.useGlobalPkgs = true;
+            home-manager.useUserPackages = true;
+
+            # Pass the same specialArgs to Home Manager
+            home-manager.extraSpecialArgs = specialArgs;
+
+            home-manager.users.jarrett = import ./users/jarrett-home-manager/home.nix;
+          }
+        ];
+      };
+
+      # deploy = import ./deploy.nix inputs;
+
+      devShells.${system}.default = nixpkgsStable.mkShell {
         buildInputs = [
           nixpkgsStable.nixos-generators
           nixpkgsStable.sops

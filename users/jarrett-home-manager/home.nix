@@ -1,4 +1,4 @@
-{ config, nixpkgs, nixpkgsUnstable, claude-desktop, environment, lib, ... }:
+{ config, nixpkgs, nixpkgsUnstable, environment, lib, ... }:
 
 let 
   # system-jdk = (nixpkgsUnstable.jdk25.override { enableJavaFX = true; });
@@ -56,7 +56,6 @@ in {
     nixpkgsUnstable.proton-pass
     nixpkgsUnstable.imagemagick
     transmission_4-gtk
-    claude-desktop.packages.x86_64-linux.claude-desktop
     nixpkgsUnstable.claude-code
     nixpkgsUnstable.appimage-run
 

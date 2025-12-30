@@ -13,10 +13,6 @@
     disko.url = "github:nix-community/disko";
     disko.inputs.nixpkgs.follows = "nixpkgs";
 
-    claude-desktop.url = "github:k3d3/claude-desktop-linux-flake";
-    claude-desktop.inputs.nixpkgs.follows = "nixpkgs";
-    claude-desktop.inputs.flake-utils.follows = "flake-utils";
-
     home-manager = {
       url = "github:nix-community/home-manager/release-25.05";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -31,7 +27,6 @@
       sops-nix,
       nixos-hardware,
       home-manager,
-      claude-desktop,
       ucodenix,
       disko,
       ...
@@ -53,7 +48,6 @@
       specialArgs = {
         nixpkgs = nixpkgsStable;
         nixpkgsUnstable = nixpkgsUnstable;
-        claude-desktop = claude-desktop;
         inherit inputs nixos-hardware;
       };
     in

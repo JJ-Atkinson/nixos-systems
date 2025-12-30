@@ -3,7 +3,7 @@
     disk = {
       main = {
         type = "disk";
-        device = "/dev/nvme0n1"; # Change this to match your Framework's NVMe device
+        device = "/dev/nvme0n1";
         content = {
           type = "gpt";
           partitions = {
@@ -14,9 +14,7 @@
                 type = "filesystem";
                 format = "vfat";
                 mountpoint = "/boot";
-                mountOptions = [
-                  "defaults"
-                ];
+                mountOptions = [ "umask=0077" ];
               };
             };
             luks = {
@@ -24,41 +22,34 @@
               content = {
                 type = "luks";
                 name = "cryptbtrfs";
-                # Disable settings.keyFile if you want to enter password interactively
-                # passwordFile = "/tmp/secret.key"; # Set this during install
+                # Interactive password prompt during install
+                # passwordFile = "/tmp/secret.key"; # Uncomment to use keyfile instead
                 settings = {
                   allowDiscards = true;
-                  # Enable this for systemd initrd
-                  # crypttabExtraOpts = [ "tpm2-device=auto" ]; # Optional: TPM2 unlock
                 };
                 content = {
                   type = "btrfs";
-                  extraArgs = [ "-f" ]; # Force overwrite
+                  extraArgs = [ "-f" ];
                   subvolumes = {
-                    # Root subvolume
                     "@" = {
                       mountpoint = "/";
-                      mountOptions = [ "subvol=@" "ssd" "noatime" ];
+                      mountOptions = [ "compress=zstd" "ssd" "noatime" ];
                     };
-                    # Home subvolume
                     "@home" = {
                       mountpoint = "/home";
-                      mountOptions = [ "subvol=@home" "ssd" "noatime" ];
+                      mountOptions = [ "compress=zstd" "ssd" "noatime" ];
                     };
-                    # Nix store subvolume with compression
                     "@nix" = {
                       mountpoint = "/nix";
-                      mountOptions = [ "subvol=@nix" "compress=zstd" "ssd" "noatime" ];
+                      mountOptions = [ "compress=zstd" "ssd" "noatime" ];
                     };
-                    # Log subvolume with compression
                     "@log" = {
                       mountpoint = "/var/log";
-                      mountOptions = [ "subvol=@log" "compress=zstd" "ssd" "noatime" ];
+                      mountOptions = [ "compress=zstd" "ssd" "noatime" ];
                     };
-                    # Swap subvolume (no compression for swap)
                     "@swap" = {
                       mountpoint = "/swap";
-                      mountOptions = [ "subvol=@swap" "compress=no" "ssd" "noatime" ];
+                      mountOptions = [ "ssd" "noatime" ];
                     };
                   };
                 };

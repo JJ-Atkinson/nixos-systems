@@ -111,7 +111,6 @@
           ucodenix.nixosModules.default
           disko.nixosModules.disko
           ./systems/nixos-framework/disko.nix
-          # ./systems/nixos-framework/fs-opts.nix # Replaced by disko.nix
           ./systems/nixos-framework/hw-opts.nix
           ./systems/nixos-framework/etc.nix
           # ./systems/nixos-framework/std-backup-restic.nix # Disabled until age key is set up

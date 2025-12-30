@@ -22,8 +22,7 @@
               content = {
                 type = "luks";
                 name = "cryptbtrfs";
-                # Interactive password prompt during install
-                # passwordFile = "/tmp/secret.key"; # Uncomment to use keyfile instead
+                askPassword = true;
                 settings = {
                   allowDiscards = true;
                 };

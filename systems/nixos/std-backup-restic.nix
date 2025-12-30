@@ -23,6 +23,18 @@ let
     '';
   };
 
+  reduRemote = nixpkgs.writeShellApplication {
+    name = "redu-remote";
+    runtimeInputs = [ nixpkgs.redu nixpkgs.restic ];
+    text = ''
+      set -euo pipefail
+      export RESTIC_REPOSITORY_FILE="${remoteRepoFile}"
+      export RESTIC_PASSWORD_FILE="${remotePassFile}"
+      export RESTIC_CACHE_DIR="/var/cache/restic-backups-remote"
+      exec redu "$@"
+    '';
+  };
+
 in
 {
   sops.age.keyFile = "/var/lib/sops-nix/keys.txt";
@@ -42,8 +54,10 @@ in
   };
   environment.systemPackages = with nixpkgs; [
     restic
+    redu
     runitor
     resticRemote
+    reduRemote
   ];
 
   systemd.services.restic-remote-backup = {

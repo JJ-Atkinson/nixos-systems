@@ -49,7 +49,6 @@ in {
     telegram-desktop
     nixpkgsUnstable.brave
     nixpkgsUnstable.firefox
-    nixpkgsUnstable.orca-slicer
     mc
     bat # like cat but nicer
     tldr # faster man access

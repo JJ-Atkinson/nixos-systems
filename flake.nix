@@ -72,6 +72,7 @@
           ./modules/ssh-access.nix
           ./modules/tailscale.nix
           ./modules/pgadmin.nix
+          ./modules/nix-serve.nix
 
           ./users/common.nix
           ./users/jarrett.nix

@@ -2,6 +2,9 @@
   # nixos-hardware module (framework-amd-ai-300-series) handles most Framework-specific configuration
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
 
+  # Enable WiFi firmware
+  hardware.enableRedistributableFirmware = true;
+
   # Use the systemd-boot EFI boot loader.
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;

@@ -1,28 +1,5 @@
 {
   "nodes": {
-    "claude-desktop": {
-      "inputs": {
-        "flake-utils": [
-          "flake-utils"
-        ],
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1761124928,
-        "narHash": "sha256-wlATQIC3QuMXHptDr58bIv+j7ebgFm+6unD90dpr2YI=",
-        "owner": "k3d3",
-        "repo": "claude-desktop-linux-flake",
-        "rev": "cede1b93368e946fb6dad41725a14f981080b84e",
-        "type": "github"
-      },
-      "original": {
-        "owner": "k3d3",
-        "repo": "claude-desktop-linux-flake",
-        "type": "github"
-      }
-    },
     "cpu-microcodes": {
       "flake": false,
       "locked": {
@@ -184,7 +161,6 @@
     },
     "root": {
       "inputs": {
-        "claude-desktop": "claude-desktop",
         "deploy": "deploy",
         "disko": "disko",
         "flake-utils": "flake-utils",

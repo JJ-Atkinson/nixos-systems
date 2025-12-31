@@ -9,7 +9,7 @@ in {
   home.homeDirectory = "/home/jarrett";
 
   home.packages = with nixpkgs; [
-    jetbrains.idea-ultimate
+    jetbrains.idea
     nixpkgsUnstable.devtoolbox
     nixpkgsUnstable.vscode-fhs
     nixpkgsUnstable.zed-editor
@@ -42,7 +42,7 @@ in {
     element-desktop
     github-desktop
     nixpkgsUnstable.rustup
-    onlyoffice-bin
+    onlyoffice-desktopeditors
     piper
     wireshark
     inkscape

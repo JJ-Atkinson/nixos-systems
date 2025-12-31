@@ -12,6 +12,9 @@
   # Use latest kernel.
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
+  # Disable AMD microcode checksum verification (required for ucodenix)
+  # boot.kernelParams = [ "microcode.amd_sha_check=off" ];
+
   # Initrd settings
   boot.initrd.systemd.enable = true;
   boot.initrd.availableKernelModules = [ "xhci_pci" "ahci" "nvme" "usbhid" "uas" "sd_mod" ];

@@ -3,22 +3,20 @@
   services.xserver.enable = true;
 
   # Enable the GNOME Desktop Environment.
-  services.xserver.displayManager.gdm.enable = true;
-  services.xserver.desktopManager.gnome.enable = true;
+  services.displayManager.gdm.enable = true;
+  services.desktopManager.gnome.enable = true;
 
   # https://discourse.nixos.org/t/how-to-set-fractional-scaling-via-nix-configuration-for-gnome-wayland/56774
   # fractional scaling enable?
-  services.xserver = {
-    displayManager.gdm = {
-      wayland = true;
-    };
-    desktopManager.gnome = {
-      # extraGSettingsOverridePackages = [ pkgs.mutter ];
-      extraGSettingsOverrides = ''
-        [org.gnome.mutter]
-        experimental-features=['scale-monitor-framebuffer']
-      '';
-    };
+  services.displayManager.gdm = {
+    wayland = true;
+  };
+  services.desktopManager.gnome = {
+    # extraGSettingsOverridePackages = [ pkgs.mutter ];
+    extraGSettingsOverrides = ''
+      [org.gnome.mutter]
+      experimental-features=['scale-monitor-framebuffer']
+    '';
   };
 
   

@@ -2,7 +2,7 @@
   description = "Two nixpkgs sets: stable and unstable";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     sops-nix.url = "github:Mic92/sops-nix";
     sops-nix.inputs.nixpkgs.follows = "nixpkgs";
@@ -12,9 +12,13 @@
     ucodenix.url = "github:e-tho/ucodenix";
     disko.url = "github:nix-community/disko";
     disko.inputs.nixpkgs.follows = "nixpkgs";
+    lanzaboote = {
+      url = "github:nix-community/lanzaboote/v1.0.0";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
     home-manager = {
-      url = "github:nix-community/home-manager/release-25.05";
+      url = "github:nix-community/home-manager/release-25.11";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -29,6 +33,7 @@
       home-manager,
       ucodenix,
       disko,
+      lanzaboote,
       ...
     }@inputs:
     let
@@ -106,14 +111,14 @@
           nixos-hardware.nixosModules.framework-amd-ai-300-series
           ucodenix.nixosModules.default
           disko.nixosModules.disko
+          lanzaboote.nixosModules.lanzaboote
           ./systems/nixos-framework/disko.nix
           ./systems/nixos-framework/hw-opts.nix
           ./systems/nixos-framework/etc.nix
-          # ./systems/nixos-framework/std-backup-restic.nix # Disabled until age key is set up
           ./systems/nixos-framework/syncthing.nix
+          ./modules/lanza.nix
           ./modules/btrfs-scrub.nix
           ./modules/desktop.nix
-          # ./modules/desktop-kde.nix
           ./modules/virtual-machines.nix
           ./modules/docker.nix
           ./modules/etc.nix

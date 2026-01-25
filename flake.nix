@@ -64,12 +64,12 @@
           ./systems/nixos/fs-opts.nix
           ./systems/nixos/hw-opts.nix
           ./systems/nixos/etc.nix
+          ./systems/nixos/virtualization-opts.nix
           ./systems/nixos/std-backup-restic.nix
           ./systems/nixos/syncthing.nix
           ./modules/btrfs-scrub.nix
           ./modules/desktop.nix
           # ./modules/desktop-kde.nix
-          ./modules/virtual-machines.nix
           ./modules/docker.nix
           ./modules/etc.nix
           ./modules/vu-driver.nix
@@ -79,6 +79,10 @@
           ./modules/pgadmin.nix
           ./modules/nix-serve.nix
           ./modules/nixos-cache.nix
+          ./modules/hardware-dev.nix
+          ./modules/spacemouse.nix
+          ./modules/re-clip.nix
+          ./modules/virtiofsd-looking-glass.nix
 
           ./users/common.nix
           ./users/jarrett.nix

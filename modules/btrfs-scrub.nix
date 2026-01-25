@@ -2,6 +2,9 @@
   services.btrfs.autoScrub = {
     enable = true;
     interval = "weekly";
-    fileSystems = [ "/" ]; # top level mount - this will make sure to only scrub every subvolume mounted inside `/` once. 
+    fileSystems = [
+      "/"  # Main system btrfs (all subvolumes)
+      "/vm-storage/images"  # VM storage btrfs (checks integrity of qcow2 files)
+    ];
   };
 }

@@ -6,7 +6,9 @@
 
   # Use the systemd-boot EFI boot loader.
   boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
+  # Temporarily disabled due to corrupted EFI variables (LoaderEntries)
+  # Re-enable after reboot to clear kernel EFI variable cache
+  boot.loader.efi.canTouchEfiVariables = false;
 
   # Use latest kernel.
   boot.kernelPackages = pkgs.linuxPackages_latest;

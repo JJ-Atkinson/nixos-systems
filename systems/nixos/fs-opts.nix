@@ -42,6 +42,21 @@
       options = [ "subvol=@swap" "compress=no" "ssd" "noatime" ];
     };
 
+  # VM Storage - WD_BLACK SN7100 2TB (nvme1n1)
+  # CoW is disabled per-directory via chattr +C (not mount option)
+  # This preserves checksumming while disabling CoW for VM images
+  fileSystems."/vm-storage/images" =
+    { device = "/dev/disk/by-uuid/90666d5e-da4d-4a0a-8016-0a949036cec1";
+      fsType = "btrfs";
+      options = [ "subvol=@vm-images" "ssd" "noatime" ];
+    };
+
+  fileSystems."/vm-storage/shared" =
+    { device = "/dev/disk/by-uuid/90666d5e-da4d-4a0a-8016-0a949036cec1";
+      fsType = "btrfs";
+      options = [ "subvol=@vm-shared" "ssd" "noatime" ];
+    };
+
   swapDevices = [ {device = "/swap/swapfile"; size = 1024 * 70; } ];
   powerManagement.enable = true;
   

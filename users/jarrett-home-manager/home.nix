@@ -17,6 +17,7 @@ in {
     spotify
     slack
     chromium
+    google-chrome
     nixpkgsUnstable.obsidian
     nixpkgsUnstable.dino
     nixpkgsUnstable.gajim
@@ -58,6 +59,7 @@ in {
     transmission_4-gtk
     nixpkgsUnstable.claude-code
     nixpkgsUnstable.appimage-run
+    nixpkgsUnstable.opencode
 
     # gnome apps
     nixpkgsUnstable.resources

@@ -83,6 +83,7 @@
           ./modules/spacemouse.nix
           ./modules/re-clip.nix
           ./modules/virtiofsd-looking-glass.nix
+          ./modules/usb-vm-passthrough.nix
 
           ./users/common.nix
           ./users/jarrett.nix

@@ -249,7 +249,7 @@
     </controller>
     <filesystem type='mount' accessmode='passthrough'>
       <driver type='virtiofs'/>
-      <binary path='/nix/store/yb24a5s8swm8qhwjzbfcasc7prhi88pp-virtiofsd-1.13.2/bin/virtiofsd'/>
+      <binary path='/nix/store/vw6vbapxh9dwaw8mhs3pyzlbr7bks6kk-virtiofsd-1.13.2-looking-glass/bin/virtiofsd'/>
       <source dir='/home/jarrett/windows-shared'/>
       <target dir='shared'/>
       <alias name='fs0'/>
@@ -304,6 +304,9 @@
       <listen type='address' address='127.0.0.1'/>
     </graphics>
     <audio id='1' type='spice'/>
+    <sound model='ich9'>
+      <audio id='1'/>
+    </sound>
     <video>
       <model type='vga' vram='16384' heads='1' primary='yes'/>
       <alias name='video0'/>
@@ -326,19 +329,9 @@
       <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x1'/>
     </hostdev>
     <hostdev mode='subsystem' type='usb' managed='yes'>
-      <source>
-        <vendor id='0x256c'/>
-        <product id='0x006d'/>
-        <address bus='1' device='6'/>
-      </source>
-      <alias name='hostdev2'/>
-      <address type='usb' bus='0' port='1'/>
-    </hostdev>
-    <hostdev mode='subsystem' type='usb' managed='yes'>
-      <source>
+      <source startupPolicy='optional'>
         <vendor id='0x256f'/>
         <product id='0xc635'/>
-        <address bus='1' device='8'/>
       </source>
       <alias name='hostdev3'/>
       <address type='usb' bus='0' port='2'/>

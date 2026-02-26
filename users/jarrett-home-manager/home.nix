@@ -10,7 +10,7 @@ in {
 
   home.packages = with nixpkgs; [
     jetbrains.idea
-    nixpkgsUnstable.devtoolbox
+    devtoolbox
     nixpkgsUnstable.vscode-fhs
     nixpkgsUnstable.zed-editor
     discord

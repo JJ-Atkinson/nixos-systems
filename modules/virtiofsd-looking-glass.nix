@@ -1,10 +1,42 @@
 { config, lib, pkgs, ... }:
 
 {
-  # Use ELginas fork of virtiofsd with Looking Glass compatibility fix
-  # This fixes the vhost_set_mem_table error when using virtiofs with IVSHMEM
-  # See: https://github.com/ELginas/virtiofsd (Looking Glass compatibility fork)
-  # Root cause: https://github.com/rust-vmm/vm-memory/pull/320
+  # ============================================================================
+  # VirtioFS + Looking Glass Compatibility Fix
+  # ============================================================================
+  #
+  # PROBLEM:
+  # The standard virtiofsd daemon (versions using vm-memory 0.16.x) fails when
+  # used alongside Looking Glass's IVSHMEM device. The error occurs during VM
+  # startup with the message:
+  #   "vhost_set_mem_table failed: Input/output error (5)"
+  #
+  # ROOT CAUSE:
+  # virtiofsd uses the vhost-user protocol which requires mapping all guest
+  # memory regions. The vm-memory 0.16.x library had buggy file-offset
+  # validation that incorrectly rejected legitimate memory mappings, including
+  # the /dev/kvmfr0 device file used by Looking Glass for IVSHMEM shared memory.
+  #
+  # THE FIX:
+  # vm-memory 0.17.0+ (released October 2025) delegates validation to the
+  # kernel's mmap() syscall instead of using homegrown validation. This allows
+  # non-seekable file descriptors (like /dev/kvmfr0) to be properly mapped.
+  #
+  # IMPLEMENTATION:
+  # Rather than wait for upstream virtiofsd to update to vm-memory 0.17.x and
+  # for NixOS to package it, we use the ELginas fork which already includes
+  # the necessary vm-memory updates for Looking Glass compatibility.
+  #
+  # REFERENCES:
+  # - Bug fix PR: https://github.com/rust-vmm/vm-memory/pull/320
+  # - Issue discussion: https://gitlab.com/virtio-fs/virtiofsd/-/issues/96
+  # - Looking Glass announcement: https://forum.level1techs.com/t/looking-glass-with-virtio-fs/231734
+  # - ELginas fork: https://github.com/ELginas/virtiofsd
+  #
+  # VERIFICATION:
+  # After rebuild, virtiofsd --version should show "1.13.2-dev" instead of
+  # "1.13.2", indicating the Looking Glass fork is active.
+  # ============================================================================
 
   nixpkgs.overlays = [
     (final: prev: {
@@ -16,7 +48,7 @@
         src = final.fetchFromGitHub {
           owner = "ELginas";
           repo = "virtiofsd";
-          rev = "main";
+          rev = "daea013daf5cdc0adc6ae14de92e3a48ac206eae";
           hash = "sha256-3p9WoUInWh+fmUkiMCjl2Tygx2/reUyKX+3xvMsW26w=";
         };
 

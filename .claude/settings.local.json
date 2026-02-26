@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:marketplace.visualstudio.com)",
+      "WebFetch(domain:clerk.vision)",
+      "WebFetch(domain:adereth.github.io)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(tree:*)",
+      "Bash(mkdir:*)",
+      "Bash(nix flake check:*)",
+      "Bash(git add:*)",
+      "Bash(curl:*)",
+      "WebFetch(domain:nixos.wiki)",
+      "Bash(nix flake show:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

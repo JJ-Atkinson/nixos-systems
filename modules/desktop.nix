@@ -63,7 +63,6 @@
     polkit-1.u2fAuth = true;
   };
 
-  services.yubikey-agent.enable = true;
   services.pcscd.enable = true;
   hardware.gpgSmartcards.enable = true;
   

@@ -80,6 +80,7 @@
           ./modules/nix-serve.nix
           ./modules/nixos-cache.nix
           ./modules/hardware-dev.nix
+          ./modules/ios-webkit-debug.nix
           ./modules/spacemouse.nix
           ./modules/re-clip.nix
           ./modules/virtiofsd-looking-glass.nix

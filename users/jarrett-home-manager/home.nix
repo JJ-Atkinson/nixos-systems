@@ -97,6 +97,11 @@ in {
 
     nixpkgsUnstable.lazydocker
     openscad
+    jq
+
+    # iOS safari debug tooling
+    libimobiledevice
+    ios-webkit-debug-proxy
 
   ];
   # This value determines the Home Manager release that your
@@ -130,6 +135,15 @@ in {
 #    '';
     initContent = ''
        eval "$(direnv hook zsh)"
+       export EDITOR="vim"
+
+       # Set Ghostty tab title from GHOSTTY_TAB_TITLE env var (set per worktree in .envrc)
+       _ghostty_tab_title_precmd() {
+         if [[ -n "$GHOSTTY_TAB_TITLE" ]]; then
+           printf '\033]0;%s\007' "$GHOSTTY_TAB_TITLE"
+         fi
+       }
+       [[ -z "''${precmd_functions[(r)_ghostty_tab_title_precmd]}" ]] && precmd_functions+=(_ghostty_tab_title_precmd)
     '';
     sessionVariables = rec {
       EDITOR = "vim";
@@ -180,6 +194,7 @@ in {
   # home.file.".aws/credentials".source = ./aws-credentials;
   home.file.".datomic/dev-local.edn".source = ./datomic-dev-local.edn;
   home.file.".config/Yubico/u2f_keys".source = ./primary_yubikey_pam_u2f; # https://nixos.wiki/wiki/Yubikey
+  home.file.".gnupg/scdaemon.conf".text = "disable-ccid\n"; # Force scdaemon to use pcscd, not direct CCID
 
 
   # systemd.user.services.ollama = {
@@ -232,6 +247,30 @@ in {
       exec = "systemctl hibernate";
       terminal = false;
       type = "Application";
+    };
+    ghostty-belafonte-day = {
+      name = "Ghostty (Belafonte Day)";
+      exec = ''ghostty "--theme=Belafonte Day"'';
+      terminal = false;
+      type = "Application";
+      icon = "com.mitchellh.ghostty";
+      categories = [ "System" "TerminalEmulator" ];
+    };
+    ghostty-coffee-theme = {
+      name = "Ghostty (Coffee Theme)";
+      exec = ''ghostty "--theme=Coffee Theme"'';
+      terminal = false;
+      type = "Application";
+      icon = "com.mitchellh.ghostty";
+      categories = [ "System" "TerminalEmulator" ];
+    };
+    ghostty-everforest-light-med = {
+      name = "Ghostty (Everforest Light Med)";
+      exec = ''ghostty "--theme=Everforest Light Med"'';
+      terminal = false;
+      type = "Application";
+      icon = "com.mitchellh.ghostty";
+      categories = [ "System" "TerminalEmulator" ];
     };
   };
 

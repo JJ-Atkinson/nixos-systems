@@ -1,7 +1,14 @@
 { config, nixpkgs, nixpkgsUnstable, environment, lib, ... }:
 
-let 
+let
   # system-jdk = (nixpkgsUnstable.jdk25.override { enableJavaFX = true; });
+  # TODO 2026-06-30: Re-evaluate whether nixpkgsUnstable.opencode still needs this local libstdc++ wrapper.
+  opencodeWithLibstdcpp = nixpkgsUnstable.opencode.overrideAttrs (old: {
+    postFixup = (old.postFixup or "") + ''
+      wrapProgram $out/bin/opencode \
+        --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [ nixpkgsUnstable.stdenv.cc.cc.lib ]}"
+    '';
+  });
 in {
   # Home Manager needs a bit of information about you and the
   # paths it should manage.
@@ -59,7 +66,7 @@ in {
     transmission_4-gtk
     nixpkgsUnstable.claude-code
     nixpkgsUnstable.appimage-run
-    nixpkgsUnstable.opencode
+    opencodeWithLibstdcpp
 
     # gnome apps
     nixpkgsUnstable.resources
@@ -128,6 +135,7 @@ in {
     enable = true;
     enableCompletion = true;
     autosuggestion.enable = true;
+    syntaxHighlighting.enable = true;
     history.extended = true;
 #    initExtra = ''
 #      ${builtins.readFile ./home/post-compinit.zsh}
@@ -136,6 +144,17 @@ in {
     initContent = ''
        eval "$(direnv hook zsh)"
        export EDITOR="vim"
+       export TERM_PROGRAM=ghostty
+
+       with-program() {
+         local depth="''${WITH_PROGRAM_NIX_SHELL_DEPTH:-0}"
+         if [[ -z "$WITH_PROGRAM_NIX_SHELL_DEPTH" && -n "$IN_NIX_SHELL" ]]; then
+           depth=1
+         fi
+         depth=$(( depth + 1 ))
+
+         command nix-shell -p "$@" --run "WITH_PROGRAM_NIX_SHELL_DEPTH=$depth ${nixpkgs.zsh}/bin/zsh"
+       }
 
        # Set Ghostty tab title from GHOSTTY_TAB_TITLE env var (set per worktree in .envrc)
        _ghostty_tab_title_precmd() {
@@ -143,15 +162,16 @@ in {
            printf '\033]0;%s\007' "$GHOSTTY_TAB_TITLE"
          fi
        }
-       [[ -z "''${precmd_functions[(r)_ghostty_tab_title_precmd]}" ]] && precmd_functions+=(_ghostty_tab_title_precmd)
-    '';
+        [[ -z "''${precmd_functions[(r)_ghostty_tab_title_precmd]}" ]] && precmd_functions+=(_ghostty_tab_title_precmd)
+
+       ${builtins.readFile ./zsh-prompt.zsh}
+     '';
     sessionVariables = rec {
       EDITOR = "vim";
     };
     oh-my-zsh = {
       enable = true;
-      # theme = "risto";
-      theme = "agnoster";
+      theme = "";
       plugins = [
         "git"
         "gcloud"
@@ -160,9 +180,7 @@ in {
         "docker-compose"
         "kubectl"
         "aws"
-        "zsh-syntax-highlighting"
         "z" # zsh-z, jump to recent folders
-        "zsh-autosuggestions"
       ];
     };
     plugins = [
@@ -178,8 +196,9 @@ in {
     user.name = "jarrett";
     user.email = "jarrett@freeformsoftware.dev";
    # Disabled when I'm working remotely
-    user.signingkey = "841C678FCEDB379A";
+    user.signingkey = "37247B55CA3CA8B1";
     commit.gpgsign = "true";
+    gpg.format = "openpgp";
   };
 
   programs.vim = {
@@ -277,4 +296,3 @@ in {
   # Let Home Manager install and manage itself.
   programs.home-manager.enable = true;
 }
-

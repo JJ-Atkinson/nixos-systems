@@ -38,6 +38,7 @@
     }@inputs:
     let
       system = "x86_64-linux";
+      rpiSystem = "aarch64-linux";
 
       # Exactly two package sets:
       nixpkgsStable = import nixpkgs {
@@ -53,6 +54,20 @@
       specialArgs = {
         nixpkgs = nixpkgsStable;
         nixpkgsUnstable = nixpkgsUnstable;
+        inherit inputs nixos-hardware;
+      };
+
+      rpiPkgs = import nixpkgs {
+        system = rpiSystem;
+        config.allowUnfree = true;
+      };
+      rpiUnstable = import unstable {
+        system = rpiSystem;
+        config.allowUnfree = true;
+      };
+      rpiSpecialArgs = {
+        nixpkgs = rpiPkgs;
+        nixpkgsUnstable = rpiUnstable;
         inherit inputs nixos-hardware;
       };
     in
@@ -155,6 +170,15 @@
 
             home-manager.users.jarrett = import ./users/jarrett-home-manager/home.nix;
           }
+        ];
+      };
+
+      nixosConfigurations.rpi4-yubikey-live = nixpkgs.lib.nixosSystem {
+        system = rpiSystem;
+        specialArgs = rpiSpecialArgs;
+        modules = [
+          nixos-hardware.nixosModules.raspberry-pi-4
+          ./systems/rpi4-yubikey-live/default.nix
         ];
       };
 

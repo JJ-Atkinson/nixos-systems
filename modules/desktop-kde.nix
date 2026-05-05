@@ -66,6 +66,7 @@
        RUN+="${nixpkgs.systemd}/bin/loginctl lock-sessions"
   '';
 
+  programs._1password.enable = true;
   programs._1password-gui = {
     enable = true;
     polkitPolicyOwners = ["jarrett"];

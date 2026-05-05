@@ -1,5 +1,7 @@
 { nixpkgs, lib, config, pkgs, ... }:
 {
+  boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
+
   # Enable libvirt and virt-manager
   programs.virt-manager.enable = true;
   virtualisation.libvirtd = {
@@ -69,7 +71,7 @@
       echo "Creating snapshot: $SNAPSHOT_NAME"
       echo "Description: $DESCRIPTION"
 
-      sudo virsh snapshot-create-as Windows11 "$SNAPSHOT_NAME" "$DESCRIPTION" --disk-only --atomic
+      sudo virsh snapshot-create-as Windows11 "$DESCRIPTION" "$SNAPSHOT_NAME" --disk-only --atomic
 
       if [ $? -eq 0 ]; then
         echo "✓ Snapshot created successfully!"

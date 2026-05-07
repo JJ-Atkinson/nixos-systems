@@ -14,6 +14,13 @@ The image is configured for `aarch64-linux`, includes the Raspberry Pi 4 hardwar
 - [Master Key Strategy](#master-key-strategy)
 - [Included Tools](#included-tools)
 - [Helper Scripts](#helper-scripts)
+- [Common Tasks](#common-tasks)
+  - [Mount The Publishing Drive](#mount-the-publishing-drive)
+  - [Set The System Clock](#set-the-system-clock)
+  - [Reset A YubiKey And Set New PINs](#reset-a-yubikey-and-set-new-pins)
+  - [Load Subkeys Onto A Prepared YubiKey](#load-subkeys-onto-a-prepared-yubikey)
+  - [Publish A Drive](#publish-a-drive)
+  - [Verify A Published Drive](#verify-a-published-drive)
 - [Build And Flash](#build-and-flash)
 - [Boot Notes](#boot-notes)
 - [Login](#login)
@@ -27,8 +34,9 @@ The image is configured for `aarch64-linux`, includes the Raspberry Pi 4 hardwar
   - [6. Move Subkeys To The YubiKey](#6-move-subkeys-to-the-yubikey)
   - [7. Enable SSH And Test](#7-enable-ssh-and-test)
   - [8. Publish To The Offline Drive](#8-publish-to-the-offline-drive)
-  - [9. Repeat For YubiKeys 2 And 3](#9-repeat-for-yubikeys-2-and-3)
+  - [9. Load An Additional YubiKey (#2 Now; #3 After §11)](#9-load-an-additional-yubikey-2-now-3-after-11)
   - [10. Replicate The Drive To Drives 2 And 3](#10-replicate-the-drive-to-drives-2-and-3)
+  - [11. Reload Working State After Reboot](#11-reload-working-state-after-reboot)
 - [Restore Master For Maintenance Operations](#restore-master-for-maintenance-operations)
 - [Use This Key On A New Machine (Public Only)](#use-this-key-on-a-new-machine-public-only)
 - [YubiKey Applet Policy](#yubikey-applet-policy)
@@ -82,6 +90,7 @@ gpg-4-finish-local             Add auth keygrip to sshcontrol and run a signing 
 gpg-5-export-public            Export GitHub-ready GPG and SSH public key files
 gpg-6-import-public            Import a public key and associate the inserted YubiKey
 gpg-7-publish-drive            Publish /public, /public-bak, /master-bak, and the redundant-backup scripts onto the mounted USB drive
+gpg-8-restore-state            After a reboot, rehydrate $LOCAL_BACKUP and the keychain from any published drive
 gpg-9-redundant-backup         Create many checksummed PAR2-protected copy sets
 gpg-9-redundant-restore        Recover the first valid or repairable copy set
 ```
@@ -108,6 +117,162 @@ It also configures GPG for Linux smartcard use:
 - Sets shell defaults for `GPG_TTY` and `SSH_AUTH_SOCK`
 
 The `gpg-agent` is configured with 24-hour TTLs (`pinentry-timeout`, `default-cache-ttl`, `max-cache-ttl`, and the `-ssh` variants) so a single login session does not re-prompt for the YubiKey PIN repeatedly. This is intentional for a single-purpose maintenance image.
+
+## Common Tasks
+
+These reusable procedures are referenced from `Fresh Key Runbook` steps below. Each subsection is the single source of truth for that procedure.
+
+- [Mount the publishing drive](#mount-the-publishing-drive)
+- [Set the system clock](#set-the-system-clock)
+- [Reset a YubiKey and set new PINs](#reset-a-yubikey-and-set-new-pins)
+- [Load subkeys onto a prepared YubiKey](#load-subkeys-onto-a-prepared-yubikey)
+- [Publish a drive](#publish-a-drive)
+- [Verify a published drive](#verify-a-published-drive)
+
+### Mount The Publishing Drive
+
+> [!NOTE]
+> Helper scripts: `gpg-0-disk-list`, `gpg-0-disk-mount`.
+
+```bash
+gpg-0-disk-list
+gpg-0-disk-mount /dev/sdXN /mnt/firstkey
+```
+
+`GPG_TTY`, `SSH_AUTH_SOCK`, `GPG_UID`, `LOCAL_BACKUP`, and `MOUNT_DIR` are already exported by the shell — no environment setup needed.
+
+### Set The System Clock
+
+> [!NOTE]
+> Helper script: `gpg-0-clock`.
+
+GPG key creation/expiration timestamps and `gpg --import` (after a reboot) both depend on the system clock. Set it before any GPG operation on a freshly-booted Pi.
+
+```bash
+gpg-0-clock
+```
+
+If the clock is wrong, set it manually (NixOS prevents `timedatectl set-ntp` because services are declarative):
+
+```bash
+gpg-0-clock "2026-05-04 22:30:00"
+```
+
+### Reset A YubiKey And Set New PINs
+
+> [!WARNING]
+> This procedure is **not** automated. PIN entry is a security boundary that should not be scripted. All previous OpenPGP material on the inserted YubiKey will be wiped if you proceed with the reset.
+
+> [!WARNING]
+> The `ykman openpgp reset` step is mandatory per YubiKey when loading subkeys onto multiple cards. Skipping it leaves the previous OpenPGP applet state in place — `gpg-3-load-card`'s `keytocard` will refuse to overwrite occupied slots, or worse, will silently leave a mix of old and new subkeys.
+
+Inspect the inserted YubiKey, reset the OpenPGP applet, and change the User and Admin PINs:
+
+```bash
+gpgconf --kill all
+gpg --card-status
+ykman info
+ykman openpgp reset
+gpg --card-edit
+```
+
+Inside `gpg/card>`:
+
+```text
+admin
+passwd
+```
+
+Choose the User PIN and Admin PIN change options, then quit.
+
+Default OpenPGP values immediately after `ykman openpgp reset`:
+
+```text
+User PIN: 123456
+Admin PIN: 12345678
+Reset code: not set
+```
+
+### Load Subkeys Onto A Prepared YubiKey
+
+> [!IMPORTANT]
+> Run this on a YubiKey that has been reset and has new PINs set (see [Reset a YubiKey and set new PINs](#reset-a-yubikey-and-set-new-pins)).
+
+> [!NOTE]
+> Helper scripts: `gpg-2-card-policy`, `gpg-3-load-card`, `gpg-4-finish-local`. Run them in order.
+
+```bash
+gpg-2-card-policy
+gpg-3-load-card
+gpg-4-finish-local
+```
+
+What each does:
+
+- **`gpg-2-card-policy`** disables PIV and OTP universally across both USB and NFC. Runs `gpgconf --kill all` and `gpg --card-status` first to release any stale agent/scdaemon hold on the card. Expected enabled applets afterward: FIDO U2F, FIDO2, OATH, OpenPGP. Disabled: Yubico OTP, PIV, YubiHSM Auth.
+- **`gpg-3-load-card`** drives `gpg --edit-key` non-interactively to move the `[E]`, `[S]`, and `[A]` subkeys onto the OpenPGP applet. Resolves `KEYFP` from `$LOCAL_BACKUP/KEYFP`. Verifies `master-secret-key.asc` and `secret-subkeys.asc` still exist in `$LOCAL_BACKUP` — without those, the next YubiKey load is impossible after `save` removes the local secret material. Refuses to run if the local secret keyring already shows `ssb>` card stubs (must re-import the master secret first via `gpg-3-reimport-master`). Only the OpenPGP Admin PIN entry remains manual (one pinentry-curses prompt per subkey). If the `--command-fd` path misbehaves on your hardware, fall back to manual editing with `gpg-3-load-card --manual` — this prints the keytocard sequence and opens `gpg --edit-key` for you to type by hand.
+- **`gpg-4-finish-local`** adds the `[A]` subkey keygrip to `~/.gnupg/sshcontrol` (idempotent), restarts `gpg-agent`, prints the SSH public key from `ssh-add -L`, and runs a quick GPG signing test through the YubiKey (prompts for the User PIN once).
+
+After a successful `save` inside `gpg-3-load-card`, the local keyring shows `ssb>` stubs:
+
+```text
+ssb> rsa4096/... [E]
+ssb> rsa4096/... [S]
+ssb> rsa4096/... [A]
+```
+
+OpenPGP applet slot mapping:
+
+```text
+1 = Signature key slot, used by the [S] subkey
+2 = Encryption key slot, used by the [E] subkey
+3 = Authentication/SSH key slot, used by the [A] subkey
+```
+
+### Publish A Drive
+
+> [!IMPORTANT]
+> Hardware: a mounted USB drive at `$MOUNT_DIR` (default `/mnt/firstkey`) and a YubiKey holding the loaded subkeys (the master is encrypted to its `[E]` subkey — the helper refuses to run without one).
+
+> [!NOTE]
+> Helper script: `gpg-7-publish-drive`. Internally calls `gpg-9-redundant-backup` and prompts for the User PIN once for the encrypted master backup.
+
+```bash
+gpg-7-publish-drive
+```
+
+Resulting layout on the drive:
+
+```text
+/mnt/firstkey/
+├── gpg-9-redundant-backup.sh         # portable copy of backup script
+├── gpg-9-redundant-restore.sh        # portable copy of restore script
+├── public/
+│   ├── import-keys                    # portable script to import on a new machine
+│   ├── public-key-gpg                 # armored GPG public key
+│   ├── public-key-ssh                 # ssh-add -L line for the [A] subkey
+│   └── fingerprint.txt                # master + subkey fingerprint summary
+├── public-bak/                        # gpg-9-redundant-backup --no-encrypt of /public
+│   └── copy-001/ ... copy-040/
+└── master-bak/                        # gpg-9-redundant-backup of master + revocation, encrypted to YubiKey
+    └── copy-001/ ... copy-040/
+```
+
+Pre-flight refuses to run if `$MOUNT_DIR` is on tmpfs/overlay/ramfs/rootfs, if `/public`, `/public-bak`, or `/master-bak` already exists, if required plaintext files are missing from `$LOCAL_BACKUP`, or if the inserted YubiKey has no encryption subkey.
+
+After publication, run [Verify a published drive](#verify-a-published-drive) before relying on this drive for recovery.
+
+### Verify A Published Drive
+
+> [!IMPORTANT]
+> Hardware: drive mounted + a YubiKey holding the loaded subkeys.
+
+```bash
+gpg-9-redundant-restore --dry-run /mnt/firstkey/master-bak
+gpg-9-redundant-restore --no-encrypt --dry-run /mnt/firstkey/public-bak
+```
+
+The dry-run decrypts with your YubiKey but writes nothing. If the encrypted `master-bak` cannot be decrypted, the drive is unusable for recovery — re-create it before storing.
 
 ## Build And Flash
 
@@ -236,34 +401,11 @@ Do not move the master key to the YubiKey. Only move the `[E]`, `[S]`, and `[A]`
 > [!IMPORTANT]
 > Hardware: USB drive 1 (the publishing drive), inserted and freshly formatted. No YubiKey required yet.
 
-> [!NOTE]
-> Helper scripts: `gpg-0-disk-list`, `gpg-0-disk-mount` cover this section automatically.
-
-Log in, plug a freshly-formatted USB drive in, and mount it at `/mnt/firstkey`:
-
-```bash
-gpg-0-disk-list
-sudo gpg-0-disk-mount /dev/sdXN /mnt/firstkey
-```
-
-`GPG_TTY`, `SSH_AUTH_SOCK`, `GPG_UID`, `LOCAL_BACKUP`, and `MOUNT_DIR` are already exported by the shell — no environment setup needed.
+Log in, plug in the drive, and run [Mount the publishing drive](#mount-the-publishing-drive).
 
 ### 2. Check The Clock
 
-> [!NOTE]
-> Helper script: `gpg-0-clock` covers this section automatically.
-
-GPG key creation and expiration timestamps use the system clock, so set it before generating keys:
-
-```bash
-gpg-0-clock
-```
-
-If the clock is wrong, set it manually (NixOS prevents `timedatectl set-ntp` because services are declarative):
-
-```bash
-gpg-0-clock "2026-05-04 22:30:00"
-```
+Run [Set the system clock](#set-the-system-clock). GPG key creation and expiration timestamps depend on it.
 
 ### 3. Generate The Master Key And Subkeys
 
@@ -293,142 +435,42 @@ gpg-1-create-key 2 "Some Other Identity <other@example.com>"
 ### 4. Prepare The YubiKey
 
 > [!IMPORTANT]
-> Hardware: YubiKey 1 inserted (USB or NFC reader). All previous OpenPGP material on this YubiKey will be wiped if you proceed with the reset.
+> Hardware: YubiKey 1 inserted (USB or NFC reader).
 
-> [!WARNING]
-> This section is **not** fully automated. `gpg-2-card-policy` only handles the OTP/PIV applet policy in step 5. The OpenPGP reset and PIN changes here are deliberately manual — PIN entry is a security boundary that should not be scripted.
-
-Inspect the inserted YubiKey:
-
-```bash
-gpgconf --kill all
-gpg --card-status
-ykman info
-```
-
-Reset the OpenPGP applet only when you are certain the inserted YubiKey is the target:
-
-```bash
-ykman openpgp reset
-```
-
-Default OpenPGP values after reset:
-
-```text
-User PIN: 123456
-Admin PIN: 12345678
-Reset code: not set
-```
-
-Change the User PIN and Admin PIN before relying on the key:
-
-```bash
-gpg --card-edit
-```
-
-Inside `gpg/card>`:
-
-```text
-admin
-passwd
-```
-
-Choose the User PIN and Admin PIN change options, then quit.
+Run [Reset a YubiKey and set new PINs](#reset-a-yubikey-and-set-new-pins) on YubiKey 1.
 
 ### 5. Disable Unused Applets
 
 > [!IMPORTANT]
 > Hardware: YubiKey 1 still inserted (the same one you just reset).
 
-> [!NOTE]
-> Helper script: `gpg-2-card-policy` covers this section automatically. It also runs `gpgconf --kill all` and `gpg --card-status` first to release any stale agent/scdaemon hold on the card.
-
 ```bash
 gpg-2-card-policy
 ```
 
-This disables PIV and OTP universally across both USB and NFC, leaving NFC and the used applets enabled.
-
-Expected enabled applets:
-
-```text
-FIDO U2F
-FIDO2
-OATH
-OpenPGP
-```
-
-Expected disabled applets:
-
-```text
-Yubico OTP
-PIV
-YubiHSM Auth
-```
+Disables PIV and OTP across both USB and NFC. See [Load subkeys onto a prepared YubiKey](#load-subkeys-onto-a-prepared-yubikey) for the expected applet result and the next two helpers.
 
 ### 6. Move Subkeys To The YubiKey
 
 > [!IMPORTANT]
 > Hardware: YubiKey 1 still inserted, with reset OpenPGP applet and your new Admin PIN set.
 
-> [!NOTE]
-> Helper script: `gpg-3-load-card` drives `gpg --edit-key` non-interactively. Only the OpenPGP Admin PIN entry remains manual (one pinentry-curses prompt per subkey).
-
 ```bash
 gpg-3-load-card
 ```
 
-The script:
-
-- Resolves `KEYFP` automatically from `$LOCAL_BACKUP/KEYFP`.
-- Verifies the plaintext backups (`master-secret-key.asc`, `secret-subkeys.asc`) still exist in `$LOCAL_BACKUP`. If not, it refuses to run — without those backups you cannot load the same identity onto another YubiKey after `save` removes the local secret material.
-- Detects whether the local secret keyring already shows `ssb>` card stubs. If yes, it refuses to run because `keytocard` would either no-op or fail; you must re-import the master secret first.
-- Drives `gpg --edit-key` non-interactively through `gpg --command-fd`. The keytocard command sequence is built in.
-- Runs `gpg --card-status` and lists the local secret keys after the editor exits.
-
-If the `--command-fd` path misbehaves on your hardware, fall back to manual editing:
-
-```bash
-gpg-3-load-card --manual
-```
-
-This prints the keytocard sequence and opens `gpg --edit-key` for you to type by hand.
-
-After a successful `save`, the local keyring shows `ssb>` stubs:
-
-```text
-ssb> rsa4096/... [E]
-ssb> rsa4096/... [S]
-ssb> rsa4096/... [A]
-```
-
-The slot mapping is:
-
-```text
-1 = Signature key slot, used by the [S] subkey
-2 = Encryption key slot, used by the [E] subkey
-3 = Authentication/SSH key slot, used by the [A] subkey
-```
+Moves the `[E]`, `[S]`, and `[A]` subkeys onto the OpenPGP applet. Prompts for the Admin PIN once per subkey via pinentry-curses. See [Load subkeys onto a prepared YubiKey](#load-subkeys-onto-a-prepared-yubikey) for what the script does, the slot mapping, and the `--manual` fallback.
 
 ### 7. Enable SSH And Test
 
 > [!IMPORTANT]
 > Hardware: YubiKey 1 still inserted with all three subkeys loaded.
 
-> [!NOTE]
-> Helper script: `gpg-4-finish-local` covers this section automatically. The signing test prompts for the User PIN once.
-
 ```bash
 gpg-4-finish-local
 ```
 
-This:
-
-- Reads `KEYFP` automatically.
-- Adds the `[A]` subkey keygrip to `~/.gnupg/sshcontrol` (idempotent).
-- Restarts `gpg-agent`.
-- Prints the SSH public key from `ssh-add -L`.
-- Runs a quick GPG signing test through the YubiKey.
+Adds the `[A]` keygrip to `sshcontrol`, restarts `gpg-agent`, and runs a signing test (prompts for the User PIN once). See [Load subkeys onto a prepared YubiKey](#load-subkeys-onto-a-prepared-yubikey) for details.
 
 For an explicit encryption test (optional):
 
@@ -440,40 +482,9 @@ gpg --decrypt /tmp/yubikey-test.gpg
 ### 8. Publish To The Offline Drive
 
 > [!IMPORTANT]
-> Hardware: USB drive 1 mounted at `/mnt/firstkey` (from step 1) **and** YubiKey 1 inserted (the master is encrypted to its `[E]` subkey).
+> Hardware: USB drive 1 mounted at `/mnt/firstkey` (from §1) **and** YubiKey 1 inserted.
 
-> [!NOTE]
-> Helper script: `gpg-7-publish-drive` covers this section automatically. The internal `gpg-9-redundant-backup` runs prompt for the User PIN once for the encrypted master backup.
-
-```bash
-gpg-7-publish-drive
-```
-
-This is the safety-critical persistence step. It publishes the identity onto the mounted USB drive at `$MOUNT_DIR` (default `/mnt/firstkey`) in the following layout:
-
-```text
-/mnt/firstkey/
-├── gpg-9-redundant-backup.sh         # portable copy of backup script
-├── gpg-9-redundant-restore.sh        # portable copy of restore script
-├── public/
-│   ├── import-keys                    # portable script to import on a new machine
-│   ├── public-key-gpg                 # armored GPG public key
-│   ├── public-key-ssh                 # ssh-add -L line for the [A] subkey
-│   └── fingerprint.txt                # master + subkey fingerprint summary
-├── public-bak/                        # gpg-9-redundant-backup --no-encrypt of /public
-│   └── copy-001/ ... copy-040/
-└── master-bak/                        # gpg-9-redundant-backup of master + revocation, encrypted to YubiKey
-    └── copy-001/ ... copy-040/
-```
-
-Pre-flight refuses to run if `$MOUNT_DIR` is on tmpfs/overlay/ramfs/rootfs, if `/public`, `/public-bak`, or `/master-bak` already exists, if required plaintext files are missing from `$LOCAL_BACKUP`, or if the inserted YubiKey has no encryption subkey.
-
-After publication, verify both backups before shredding any plaintext:
-
-```bash
-gpg-9-redundant-restore --dry-run /mnt/firstkey/master-bak
-gpg-9-redundant-restore --no-encrypt --dry-run /mnt/firstkey/public-bak
-```
+This is the safety-critical persistence step. Run [Publish a drive](#publish-a-drive), then [Verify a published drive](#verify-a-published-drive) before doing anything destructive.
 
 The plaintext working backups in `$LOCAL_BACKUP` live on RAM-backed tmpfs and vanish on reboot. They can also be shredded explicitly:
 
@@ -494,63 +505,50 @@ The files needed for GitHub upload (and any other public distribution) are now s
 
 Upload these later from any online machine — the offline Pi never needs network access. They are public-only and contain no secret material.
 
-### 9. Repeat For YubiKeys 2 And 3
+### 9. Load An Additional YubiKey (#2 Now; #3 After §11)
 
 > [!IMPORTANT]
-> Hardware: the next YubiKey (e.g. YubiKey 2). USB drive 1 should be re-mounted at `/mnt/firstkey` if you unmounted it between steps — `gpg-3-reimport-master` reads `$LOCAL_BACKUP` (RAM), but having the drive mounted means you can spot-check `/master-bak/` after each YubiKey loads. The previous YubiKey can stay inserted on a different USB port for cross-checking, but the OpenPGP commands operate on whichever single card `gpg --card-status` finds first — keep things unambiguous by inserting one card at a time.
+> Hardware: the next YubiKey to load. The previous YubiKey can stay inserted on a different USB port for cross-checking, but the OpenPGP commands operate on whichever single card `gpg --card-status` finds first — keep things unambiguous by inserting one card at a time.
 
 > [!NOTE]
-> Helper scripts: `gpg-0-disk-list`, `gpg-0-disk-mount` (only if the drive was unmounted), then `gpg-3-reimport-master`, `gpg-2-card-policy`, `gpg-3-load-card`, `gpg-4-finish-local`. Repeat the block once per additional YubiKey. The PIN-entry steps from §4 (OpenPGP reset, PIN change) still apply per YubiKey; do them between `gpg-3-reimport-master` and `gpg-2-card-policy`.
+> Recommended cadence: load YubiKey **#2** here, then run §10 (replicate drives) and §11 (reboot + reload working state) **before** loading YubiKey **#3**. Doing §11 between #2 and #3 forces a real-world test of the cold-recovery path while you still have the in-RAM plaintext as a fallback. After §11 returns you to end-of-§7 state, come back here for #3.
 
-If the drive is not currently mounted at `/mnt/firstkey`, remount it first:
+For each additional YubiKey:
 
-```bash
-gpg-0-disk-list
-sudo gpg-0-disk-mount /dev/sdXN /mnt/firstkey
-```
+1. (If the drive was unmounted between steps) Run [Mount the publishing drive](#mount-the-publishing-drive) — `gpg-3-reimport-master` only reads `$LOCAL_BACKUP` (RAM), but having the drive mounted lets you spot-check `/master-bak/` after each load.
+2. Re-import the master so subkey material is movable again:
+   ```bash
+   gpg-3-reimport-master
+   ```
+3. Physically swap to the next YubiKey, then run [Reset a YubiKey and set new PINs](#reset-a-yubikey-and-set-new-pins) on it.
+4. Run [Load subkeys onto a prepared YubiKey](#load-subkeys-onto-a-prepared-yubikey).
 
-Then for each additional YubiKey:
-
-```bash
-gpg-3-reimport-master
-# Then physically swap to the next YubiKey, run §4 manual reset+PIN-change on it,
-# then continue:
-gpg-2-card-policy
-gpg-3-load-card
-gpg-4-finish-local
-```
-
-`gpg-3-reimport-master` clears the `ssb>` stubs left by the previous load and re-imports the master secret from `$LOCAL_BACKUP/master-secret-key.asc` so `gpg-3-load-card` has real subkey material to move. After step 9's full block runs successfully on a YubiKey, the local keyring is back to `ssb>` stubs — re-run `gpg-3-reimport-master` again before the next YubiKey.
+`gpg-3-reimport-master` clears the `ssb>` stubs left by the previous load and re-imports the master secret from `$LOCAL_BACKUP/master-secret-key.asc` so `gpg-3-load-card` has real subkey material to move. After the block runs successfully on a YubiKey, the local keyring is back to `ssb>` stubs — re-run `gpg-3-reimport-master` again before the next YubiKey.
 
 > [!WARNING]
 > Each `keytocard` round drops the local subkey secret material onto a YubiKey and removes it from the keyring. The plaintext copy in `$LOCAL_BACKUP/master-secret-key.asc` is what makes the next YubiKey load possible. Do not delete `$LOCAL_BACKUP` until every YubiKey you intend to load is loaded.
 
-Do not run `gpg-7-publish-drive` again per YubiKey — the drive layout is identical regardless of which YubiKey loaded it. `gpg-7-publish-drive` is per-drive (step 10), not per-YubiKey.
+Do not run `gpg-7-publish-drive` again per YubiKey — the drive layout is identical regardless of which YubiKey loaded it. `gpg-7-publish-drive` is per-drive (§10), not per-YubiKey.
 
 > The `gpg-6-import-public` helper is **not** for this case. It imports only a public key for use with an already-loaded YubiKey on a new machine. See "[Use This Key On A New Machine](#use-this-key-on-a-new-machine-public-only)" below.
 
 ### 10. Replicate The Drive To Drives 2 And 3
 
 > [!IMPORTANT]
-> Hardware: USB drive N (drive 2 or drive 3) and any one of your loaded YubiKeys. The plaintext working backups in `$LOCAL_BACKUP` (RAM tmpfs) must still be present — if you have rebooted, you cannot use the publish path; use rsync instead.
+> Hardware: USB drive N (drive 2 or drive 3) and any one of your loaded YubiKeys. The plaintext working backups in `$LOCAL_BACKUP` (RAM tmpfs) must still be present for Approach A — if you have rebooted, only Approach B (rsync) works.
 
-> [!NOTE]
-> Helper script: `gpg-7-publish-drive` re-runs cleanly per drive. Each invocation produces fresh PAR2 sets and a freshly encrypted master backup.
+You want at least two physical copies of the published drive at separate locations, ideally three.
 
-You want at least two physical copies of the published drive at separate locations, ideally three. Two approaches:
+**A. Re-run the publish per drive (recommended while `$LOCAL_BACKUP` is still populated).**
 
-**A. Re-run `gpg-7-publish-drive` per drive (recommended while `$LOCAL_BACKUP` is still populated).**
+Each drive gets its own independently-encrypted `/master-bak/` (different gpg session keys, identical recoverability) and freshly-generated PAR2 data. Per drive:
 
-Each drive gets its own independently-encrypted `/master-bak/` (different gpg session keys, identical recoverability) and freshly-generated PAR2 data:
-
-```bash
-sudo umount /mnt/firstkey
-gpg-0-disk-list
-sudo gpg-0-disk-mount /dev/sdYN /mnt/firstkey
-gpg-7-publish-drive
-gpg-9-redundant-restore --dry-run /mnt/firstkey/master-bak
-gpg-9-redundant-restore --no-encrypt --dry-run /mnt/firstkey/public-bak
-```
+1. Insert any loaded YubiKey.
+2. Unmount the previous drive: `sudo umount /mnt/firstkey`.
+3. Run [Mount the publishing drive](#mount-the-publishing-drive) with the new drive's partition path.
+4. Run `gpg --card-status` to confirm the encryption subkey is present.
+5. Run [Publish a drive](#publish-a-drive).
+6. Run [Verify a published drive](#verify-a-published-drive).
 
 Repeat for drive 3. Each drive ends up self-contained with `/gpg-9-redundant-{backup,restore}.sh`, `/public/`, `/public-bak/`, and `/master-bak/`.
 
@@ -559,23 +557,46 @@ Repeat for drive 3. Each drive ends up self-contained with `/gpg-9-redundant-{ba
 Useful if you have already shredded `$LOCAL_BACKUP` or rebooted. Each drive ends up with bit-identical contents of `/master-bak/`, which is fine for redundancy but means a single ciphertext is stored in three places:
 
 ```bash
-sudo gpg-0-disk-mount /dev/sdYN /mnt/seconddrive
+gpg-0-disk-mount /dev/sdYN /mnt/seconddrive
 sudo rsync -av /mnt/firstkey/ /mnt/seconddrive/
 sync
 sudo umount /mnt/seconddrive
 ```
 
-After all drives are written, verify each independently. Insert any loaded YubiKey, mount the drive, and run:
-
-```bash
-gpg-9-redundant-restore --dry-run /mnt/firstkey/master-bak
-gpg-9-redundant-restore --no-encrypt --dry-run /mnt/firstkey/public-bak
-```
-
-The dry-run decrypts with your YubiKey but writes nothing. If the encrypted master cannot be decrypted, the drive is unusable for recovery — re-create it before storing.
+After all drives are written, run [Verify a published drive](#verify-a-published-drive) on each independently before storing.
 
 > [!CAUTION]
 > Only after at least two drives verify cleanly should you shred `$LOCAL_BACKUP` and reboot the Pi. A single drive failing in storage years later, with no other copies, is the dominant practical loss path.
+
+### 11. Reload Working State After Reboot
+
+> [!IMPORTANT]
+> Hardware: any one published USB drive + any one of your loaded YubiKeys. Use this when you've rebooted the Pi between loading YubiKeys (or when you want to prove end-to-end recoverability before locking everything away).
+
+> [!NOTE]
+> Helper script: `gpg-8-restore-state` covers this entire section. It runs `import-keys`, `gpg-9-redundant-restore`, copies the master + revocation cert into `$LOCAL_BACKUP`, imports the master into the local keychain, writes `$LOCAL_BACKUP/KEYFP`, and re-attaches YubiKey stubs.
+
+After a reboot, `/dev/shm` is empty and the gpg keychain is gone. The Pi has no RTC, so the system clock is also wrong on cold boot — gpg will refuse to import a key whose creation date appears to be in the future. Set the clock first.
+
+1. Run [Set the system clock](#set-the-system-clock) — pass an explicit `"YYYY-MM-DD HH:MM:SS"` since there's no NTP source on the offline image.
+2. Run [Mount the publishing drive](#mount-the-publishing-drive).
+3. Then:
+   ```bash
+   gpg-8-restore-state
+   ```
+
+> [!WARNING]
+> If you skip the clock step, `gpg --import` inside `gpg-8-restore-state` will print a "key was created N days in the future — time warp" warning and **the import silently produces zero keys**. Downstream commands will then fail in confusing ways. Always set the clock first on a freshly-rebooted Pi.
+
+When `gpg-8-restore-state` exits cleanly, `$LOCAL_BACKUP` has the same shape it did at the end of §7 (`master-secret-key.asc`, `revocation-certificate.asc`, `public-key.asc`, `KEYFP`), the master is in the local keychain, and `gpg --card-status` shows the inserted YubiKey's stubs.
+
+**Now go back to [§9](#9-load-an-additional-yubikey-2-now-3-after-11) with YubiKey #3.** After #3 finishes, you are done with the runbook — shred `$LOCAL_BACKUP` (or just power off, since it is RAM-backed) and lock the YubiKeys + drives in their respective storage locations.
+
+> [!CAUTION]
+> If `gpg-9-redundant-restore` (called from inside `gpg-8-restore-state`) fails to decrypt `master-bak` on this drive, that drive is unusable for recovery — try another. If all drives fail, the YubiKey `[E]` subkey doesn't match what was used at publish time and the encrypted backup is permanently inaccessible.
+
+> [!WARNING]
+> After this restores plaintext into `$LOCAL_BACKUP`, treat that directory as sensitive again — it now contains the master and revocation cert. Either proceed straight to §9 to load another YubiKey and then shred per §8's caution, or reboot before stepping away. `$LOCAL_BACKUP` is RAM-backed and vanishes on power-off.
 
 ## Restore Master For Maintenance Operations
 

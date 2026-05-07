@@ -10,6 +10,10 @@ let
     '';
   });
 in {
+  imports = [
+    ./zsh-hm-config.nix
+  ];
+
   # Home Manager needs a bit of information about you and the
   # paths it should manage.
   home.username = "jarrett";
@@ -35,6 +39,7 @@ in {
     syncthing
     gnupg
     yubikey-manager
+    par2cmdline-turbo
     obs-studio
     direnv
     magic-wormhole
@@ -131,61 +136,7 @@ in {
 
 
   # environment.shells = with nixpkgs; [ zsh ];
-  programs.zsh = {
-    enable = true;
-    enableCompletion = true;
-    autosuggestion.enable = true;
-    syntaxHighlighting.enable = true;
-    history.extended = true;
-#    initExtra = ''
-#      ${builtins.readFile ./home/post-compinit.zsh}
-#      ${builtins.readFile ./home/shell-aliases.zsh}
-#    '';
-    initContent = ''
-       eval "$(direnv hook zsh)"
-       export EDITOR="vim"
-       export TERM_PROGRAM=ghostty
-
-       with-program() {
-         local depth="''${WITH_PROGRAM_NIX_SHELL_DEPTH:-0}"
-         if [[ -z "$WITH_PROGRAM_NIX_SHELL_DEPTH" && -n "$IN_NIX_SHELL" ]]; then
-           depth=1
-         fi
-         depth=$(( depth + 1 ))
-
-         command nix-shell -p "$@" --run "WITH_PROGRAM_NIX_SHELL_DEPTH=$depth ${nixpkgs.zsh}/bin/zsh"
-       }
-
-       # Set Ghostty tab title from GHOSTTY_TAB_TITLE env var (set per worktree in .envrc)
-       _ghostty_tab_title_precmd() {
-         if [[ -n "$GHOSTTY_TAB_TITLE" ]]; then
-           printf '\033]0;%s\007' "$GHOSTTY_TAB_TITLE"
-         fi
-       }
-        [[ -z "''${precmd_functions[(r)_ghostty_tab_title_precmd]}" ]] && precmd_functions+=(_ghostty_tab_title_precmd)
-
-       ${builtins.readFile ./zsh-prompt.zsh}
-     '';
-    sessionVariables = rec {
-      EDITOR = "vim";
-    };
-    oh-my-zsh = {
-      enable = true;
-      theme = "";
-      plugins = [
-        "git"
-        "gcloud"
-        "fzf"
-        "docker"
-        "docker-compose"
-        "kubectl"
-        "aws"
-        "z" # zsh-z, jump to recent folders
-      ];
-    };
-    plugins = [
-    ];
-  };
+  # zsh config lives in ./zsh-hm-config.nix (shared with rpi4-yubikey-live)
 
   xsession.windowManager.bspwm.startupPrograms = ["imwheel"];
 
@@ -196,7 +147,7 @@ in {
     user.name = "jarrett";
     user.email = "jarrett@freeformsoftware.dev";
    # Disabled when I'm working remotely
-    user.signingkey = "37247B55CA3CA8B1";
+    user.signingkey = "1B78F90203495DE0";
     commit.gpgsign = "true";
     gpg.format = "openpgp";
   };

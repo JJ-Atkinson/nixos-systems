@@ -25,6 +25,8 @@
   time.timeZone = "America/Chicago";
   i18n.defaultLocale = "en_US.UTF-8";
   console.keyMap = "us";
+  console.packages = [ pkgs.terminus_font ];
+  console.font = "ter-v16n";
 
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
@@ -34,7 +36,11 @@
     isNormalUser = true;
     extraGroups = [ "wheel" ];
     hashedPassword = "";
+    shell = pkgs.zsh;
   };
+
+  programs.zsh.enable = true;
+  users.defaultUserShell = pkgs.zsh;
 
   security.pam.services.login.allowNullPassword = true;
   security.sudo.wheelNeedsPassword = false;
@@ -117,6 +123,8 @@
     less
     usbutils
     dnsutils
+    fzf
+    bat
 
     (writeShellApplication {
       name = "gpg-0-disk-list";
@@ -182,6 +190,11 @@
         export RPI4_IMPORT_KEYS_SCRIPT="${./scripts/import-keys.sh}"
         ${builtins.readFile ./scripts/gpg-7-publish-drive.sh}
       '';
+    })
+    (writeShellApplication {
+      name = "gpg-8-restore-state";
+      runtimeInputs = [ coreutils gnupg gawk gnugrep util-linux findutils diffutils ];
+      text = builtins.readFile ./scripts/gpg-8-restore-state.sh;
     })
     (writeShellApplication {
       name = "gpg-9-redundant-backup";

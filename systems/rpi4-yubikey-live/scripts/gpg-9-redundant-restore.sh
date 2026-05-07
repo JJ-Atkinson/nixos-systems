@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# shellcheck disable=SC2154
+trap 'rc=$?; printf "\nERROR: %s exited %d at %s:%d (cmd: %s)\n" "$(basename "$0")" "$rc" "${BASH_SOURCE[0]}" "$LINENO" "$BASH_COMMAND" >&2' ERR
 
 usage() {
   cat >&2 <<'EOF'
@@ -58,6 +60,11 @@ fi
 
 tmp_root=$(mktemp -d)
 cleanup() {
+  rc=$?
+  if [ "$rc" -ne 0 ] && [ -d "$tmp_root" ]; then
+    printf 'Failure (rc=%d). Staging dir was %s — listing before cleanup:\n' "$rc" "$tmp_root" >&2
+    ls -la "$tmp_root" >&2 || true
+  fi
   rm -rf "$tmp_root"
 }
 trap cleanup EXIT

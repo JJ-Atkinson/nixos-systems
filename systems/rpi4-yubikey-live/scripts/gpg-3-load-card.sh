@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# shellcheck disable=SC2154
+trap 'rc=$?; printf "\nERROR: %s exited %d at %s:%d (cmd: %s)\n" "$(basename "$0")" "$rc" "${BASH_SOURCE[0]}" "$LINENO" "$BASH_COMMAND" >&2' ERR
 
 usage() {
   cat >&2 <<'EOF'
@@ -98,7 +100,15 @@ if [ "$allow_stubs" = false ]; then
 fi
 
 printf 'Current card status:\n'
-gpg --card-status || true
+card_status_file=$(mktemp -p /dev/shm gpg-card-status.XXXXXX)
+if ! timeout 10s gpg --card-status >"$card_status_file" 2>&1; then
+  printf '\ngpg --card-status failed or timed out. Output:\n' >&2
+  sed 's/^/  /' "$card_status_file" >&2
+  rm -f "$card_status_file"
+  exit 1
+fi
+cat "$card_status_file"
+rm -f "$card_status_file"
 
 printf '\nLocal key layout for %s:\n' "$keyfp"
 gpg --list-secret-keys --keyid-format LONG --with-subkey-fingerprint "$keyfp"

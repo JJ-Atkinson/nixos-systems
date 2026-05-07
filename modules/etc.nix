@@ -11,8 +11,6 @@
     options = "--delete-older-than 30d";
   };
 
-  # system.autoUpgrade.enable = true; 
-
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
   system.stateVersion = "25.05";

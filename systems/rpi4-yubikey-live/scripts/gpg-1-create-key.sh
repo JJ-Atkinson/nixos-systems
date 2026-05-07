@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# shellcheck disable=SC2154
+trap 'rc=$?; printf "\nERROR: %s exited %d at %s:%d (cmd: %s)\n" "$(basename "$0")" "$rc" "${BASH_SOURCE[0]}" "$LINENO" "$BASH_COMMAND" >&2' ERR
 
 usage() {
   cat >&2 <<'EOF'
@@ -54,6 +56,10 @@ chmod 700 "$local_backup"
 before=$(mktemp)
 after=$(mktemp)
 cleanup() {
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    printf 'Failure (rc=%d). Fingerprint diff temp files were:\n  before=%s\n  after=%s\n' "$rc" "$before" "$after" >&2
+  fi
   rm -f "$before" "$after"
 }
 trap cleanup EXIT
@@ -84,8 +90,11 @@ gpg --batch --pinentry-mode loopback --passphrase '' \
 
 printf 'Exporting plaintext working backups to RAM: %s\n' "$local_backup"
 gpg --armor --export "$keyfp" > "$local_backup/public-key.asc"
+[ -s "$local_backup/public-key.asc" ] || { printf 'gpg --armor --export %s produced empty output\n' "$keyfp" >&2; exit 1; }
 gpg --armor --export-secret-keys "$keyfp" > "$local_backup/master-secret-key.asc"
+[ -s "$local_backup/master-secret-key.asc" ] || { printf 'gpg --armor --export-secret-keys %s produced empty output\n' "$keyfp" >&2; exit 1; }
 gpg --armor --export-secret-subkeys "$keyfp" > "$local_backup/secret-subkeys.asc"
+[ -s "$local_backup/secret-subkeys.asc" ] || { printf 'gpg --armor --export-secret-subkeys %s produced empty output\n' "$keyfp" >&2; exit 1; }
 
 printf 'Generating revocation certificate (reason: key compromised)...\n'
 gpg --pinentry-mode loopback --passphrase '' \

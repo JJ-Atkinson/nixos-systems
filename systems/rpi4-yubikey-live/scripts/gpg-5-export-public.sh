@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# shellcheck disable=SC2154
+trap 'rc=$?; printf "\nERROR: %s exited %d at %s:%d (cmd: %s)\n" "$(basename "$0")" "$rc" "${BASH_SOURCE[0]}" "$LINENO" "$BASH_COMMAND" >&2' ERR
 
 usage() {
   cat >&2 <<'EOF'
@@ -49,6 +51,7 @@ export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$(gpgconf --list-dirs agent-ssh-socket)}"
 mkdir -p "$output_dir"
 
 gpg --armor --export "$keyfp" > "$output_dir/github-gpg-public-key.asc"
+[ -s "$output_dir/github-gpg-public-key.asc" ] || { printf 'gpg --armor --export %s produced empty output (key not in keyring?)\n' "$keyfp" >&2; exit 1; }
 
 ssh_output=$(ssh-add -L 2>/dev/null || true)
 if [ -z "$ssh_output" ]; then

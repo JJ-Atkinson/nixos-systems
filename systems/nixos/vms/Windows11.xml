@@ -1,4 +1,4 @@
-<domain type='kvm' id='7' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
   <name>Windows11</name>
   <uuid>887902d6-e787-4be4-aeb1-665a7c28f443</uuid>
   <metadata>
@@ -12,7 +12,7 @@
     <source type='memfd'/>
     <access mode='shared'/>
   </memoryBacking>
-  <vcpu placement='static'>16</vcpu>
+  <vcpu placement='static'>12</vcpu>
   <cputune>
     <vcpupin vcpu='0' cpuset='2'/>
     <vcpupin vcpu='1' cpuset='3'/>
@@ -26,11 +26,7 @@
     <vcpupin vcpu='9' cpuset='11'/>
     <vcpupin vcpu='10' cpuset='12'/>
     <vcpupin vcpu='11' cpuset='13'/>
-    <vcpupin vcpu='12' cpuset='16'/>
-    <vcpupin vcpu='13' cpuset='17'/>
-    <vcpupin vcpu='14' cpuset='18'/>
-    <vcpupin vcpu='15' cpuset='19'/>
-    <emulatorpin cpuset='0-1,14-15'/>
+    <emulatorpin cpuset='0-1,14-27'/>
   </cputune>
   <resource>
     <partition>/machine</partition>
@@ -71,7 +67,7 @@
     <ioapic driver='kvm'/>
   </features>
   <cpu mode='host-passthrough' check='none' migratable='off'>
-    <topology sockets='1' dies='1' clusters='1' cores='8' threads='2'/>
+    <topology sockets='1' dies='1' clusters='1' cores='6' threads='2'/>
     <cache mode='passthrough'/>
     <feature policy='require' name='topoext'/>
   </cpu>
@@ -91,160 +87,105 @@
   <devices>
     <emulator>/run/libvirt/nix-emulators/qemu-system-x86_64</emulator>
     <disk type='file' device='disk'>
-      <driver name='qemu' type='qcow2' cache='writeback' discard='unmap'/>
-      <source file='/vm-storage/images/windows11.snapshot-20260124-231520' index='3'/>
-      <backingStore type='file' index='4'>
-        <format type='qcow2'/>
-        <source file='/vm-storage/images/windows11.snapshot-20260124-231005'/>
-        <backingStore type='file' index='5'>
-          <format type='qcow2'/>
-          <source file='/vm-storage/images/windows11.snapshot-20260124-222852'/>
-          <backingStore type='file' index='6'>
-            <format type='qcow2'/>
-            <source file='/vm-storage/images/windows11.snapshot-20260124-222408'/>
-            <backingStore type='file' index='7'>
-              <format type='qcow2'/>
-              <source file='/vm-storage/images/windows11.snapshot-20260124-221051'/>
-              <backingStore type='file' index='8'>
-                <format type='qcow2'/>
-                <source file='/vm-storage/images/windows11.snapshot-20260124-214449'/>
-                <backingStore type='file' index='9'>
-                  <format type='qcow2'/>
-                  <source file='/vm-storage/images/windows11.snapshot-20260124-210227'/>
-                  <backingStore type='file' index='10'>
-                    <format type='qcow2'/>
-                    <source file='/vm-storage/images/windows11.fresh-install'/>
-                    <backingStore type='file' index='11'>
-                      <format type='qcow2'/>
-                      <source file='/vm-storage/images/windows11.qcow2'/>
-                      <backingStore/>
-                    </backingStore>
-                  </backingStore>
-                </backingStore>
-              </backingStore>
-            </backingStore>
-          </backingStore>
-        </backingStore>
-      </backingStore>
+      <driver name='qemu' type='qcow2' cache='none' io='native' discard='unmap'/>
+      <source file='/vm-storage/images/windows11.flattened-20260506.qcow2'/>
       <target dev='vda' bus='virtio'/>
-      <alias name='virtio-disk0'/>
       <address type='pci' domain='0x0000' bus='0x06' slot='0x00' function='0x0'/>
     </disk>
     <disk type='file' device='cdrom'>
       <driver name='qemu' type='raw'/>
-      <source file='/home/jarrett/Downloads/minimal-win-11.iso' index='2'/>
+      <source file='/home/jarrett/Downloads/minimal-win-11.iso'/>
       <backingStore/>
       <target dev='sda' bus='sata'/>
       <readonly/>
-      <alias name='sata0-0-0'/>
       <address type='drive' controller='0' bus='0' target='0' unit='0'/>
     </disk>
     <disk type='file' device='cdrom'>
       <driver name='qemu' type='raw'/>
-      <source file='/home/jarrett/Downloads/virtio-win.iso' index='1'/>
+      <source file='/home/jarrett/Downloads/virtio-win.iso'/>
       <backingStore/>
       <target dev='sdb' bus='sata'/>
       <readonly/>
-      <alias name='sata0-0-1'/>
       <address type='drive' controller='0' bus='0' target='0' unit='1'/>
     </disk>
     <controller type='usb' index='0' model='qemu-xhci' ports='15'>
-      <alias name='usb'/>
       <address type='pci' domain='0x0000' bus='0x04' slot='0x00' function='0x0'/>
     </controller>
-    <controller type='pci' index='0' model='pcie-root'>
-      <alias name='pcie.0'/>
-    </controller>
+    <controller type='pci' index='0' model='pcie-root'/>
     <controller type='pci' index='1' model='pcie-root-port'>
       <model name='pcie-root-port'/>
       <target chassis='1' port='0x10'/>
-      <alias name='pci.1'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x0' multifunction='on'/>
     </controller>
     <controller type='pci' index='2' model='pcie-root-port'>
       <model name='pcie-root-port'/>
       <target chassis='2' port='0x11'/>
-      <alias name='pci.2'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x1'/>
     </controller>
     <controller type='pci' index='3' model='pcie-root-port'>
       <model name='pcie-root-port'/>
       <target chassis='3' port='0x12'/>
-      <alias name='pci.3'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x2'/>
     </controller>
     <controller type='pci' index='4' model='pcie-root-port'>
       <model name='pcie-root-port'/>
       <target chassis='4' port='0x13'/>
-      <alias name='pci.4'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x3'/>
     </controller>
     <controller type='pci' index='5' model='pcie-root-port'>
       <model name='pcie-root-port'/>
       <target chassis='5' port='0x14'/>
-      <alias name='pci.5'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x4'/>
     </controller>
     <controller type='pci' index='6' model='pcie-root-port'>
       <model name='pcie-root-port'/>
       <target chassis='6' port='0x15'/>
-      <alias name='pci.6'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x5'/>
     </controller>
     <controller type='pci' index='7' model='pcie-root-port'>
       <model name='pcie-root-port'/>
       <target chassis='7' port='0x16'/>
-      <alias name='pci.7'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x6'/>
     </controller>
     <controller type='pci' index='8' model='pcie-root-port'>
       <model name='pcie-root-port'/>
       <target chassis='8' port='0x17'/>
-      <alias name='pci.8'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x7'/>
     </controller>
     <controller type='pci' index='9' model='pcie-root-port'>
       <model name='pcie-root-port'/>
       <target chassis='9' port='0x18'/>
-      <alias name='pci.9'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x0' multifunction='on'/>
     </controller>
     <controller type='pci' index='10' model='pcie-root-port'>
       <model name='pcie-root-port'/>
       <target chassis='10' port='0x19'/>
-      <alias name='pci.10'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x1'/>
     </controller>
     <controller type='pci' index='11' model='pcie-root-port'>
       <model name='pcie-root-port'/>
       <target chassis='11' port='0x1a'/>
-      <alias name='pci.11'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x2'/>
     </controller>
     <controller type='pci' index='12' model='pcie-root-port'>
       <model name='pcie-root-port'/>
       <target chassis='12' port='0x1b'/>
-      <alias name='pci.12'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x3'/>
     </controller>
     <controller type='pci' index='13' model='pcie-root-port'>
       <model name='pcie-root-port'/>
       <target chassis='13' port='0x1c'/>
-      <alias name='pci.13'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x4'/>
     </controller>
     <controller type='pci' index='14' model='pcie-root-port'>
       <model name='pcie-root-port'/>
       <target chassis='14' port='0x1d'/>
-      <alias name='pci.14'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x5'/>
     </controller>
     <controller type='sata' index='0'>
-      <alias name='ide'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x1f' function='0x2'/>
     </controller>
     <controller type='virtio-serial' index='0'>
-      <alias name='virtio-serial0'/>
       <address type='pci' domain='0x0000' bus='0x05' slot='0x00' function='0x0'/>
     </controller>
     <filesystem type='mount' accessmode='passthrough'>
@@ -252,64 +193,49 @@
       <binary path='/nix/store/vw6vbapxh9dwaw8mhs3pyzlbr7bks6kk-virtiofsd-1.13.2-looking-glass/bin/virtiofsd'/>
       <source dir='/home/jarrett/windows-shared'/>
       <target dir='shared'/>
-      <alias name='fs0'/>
       <address type='pci' domain='0x0000' bus='0x02' slot='0x00' function='0x0'/>
     </filesystem>
     <interface type='bridge'>
       <mac address='52:54:00:5c:da:38'/>
       <source bridge='virbr0'/>
-      <target dev='vnet6'/>
       <model type='virtio'/>
-      <alias name='net0'/>
       <address type='pci' domain='0x0000' bus='0x03' slot='0x00' function='0x0'/>
     </interface>
     <serial type='pty'>
-      <source path='/dev/pts/2'/>
       <target type='isa-serial' port='0'>
         <model name='isa-serial'/>
       </target>
-      <alias name='serial0'/>
     </serial>
-    <console type='pty' tty='/dev/pts/2'>
-      <source path='/dev/pts/2'/>
+    <console type='pty'>
       <target type='serial' port='0'/>
-      <alias name='serial0'/>
     </console>
     <channel type='spicevmc'>
-      <target type='virtio' name='com.redhat.spice.0' state='connected'/>
-      <alias name='channel0'/>
+      <target type='virtio' name='com.redhat.spice.0'/>
       <address type='virtio-serial' controller='0' bus='0' port='1'/>
     </channel>
     <input type='mouse' bus='virtio'>
-      <alias name='input0'/>
       <address type='pci' domain='0x0000' bus='0x08' slot='0x00' function='0x0'/>
     </input>
     <input type='keyboard' bus='virtio'>
-      <alias name='input1'/>
       <address type='pci' domain='0x0000' bus='0x09' slot='0x00' function='0x0'/>
     </input>
-    <input type='mouse' bus='ps2'>
-      <alias name='input2'/>
-    </input>
-    <input type='keyboard' bus='ps2'>
-      <alias name='input3'/>
-    </input>
+    <input type='mouse' bus='ps2'/>
+    <input type='keyboard' bus='ps2'/>
     <tpm model='tpm-crb'>
       <backend type='emulator' version='2.0'>
         <profile name='default-v1'/>
       </backend>
-      <alias name='tpm0'/>
     </tpm>
-    <graphics type='spice' port='5900' autoport='yes' listen='127.0.0.1'>
+    <graphics type='spice' autoport='yes' listen='127.0.0.1'>
       <listen type='address' address='127.0.0.1'/>
     </graphics>
-    <audio id='1' type='spice'/>
     <sound model='ich9'>
       <audio id='1'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x1b' function='0x0'/>
     </sound>
+    <audio id='1' type='spice'/>
     <video>
       <model type='vga' vram='16384' heads='1' primary='yes'/>
-      <alias name='video0'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x0'/>
     </video>
     <hostdev mode='subsystem' type='pci' managed='yes'>
@@ -317,7 +243,6 @@
       <source>
         <address domain='0x0000' bus='0x06' slot='0x00' function='0x0'/>
       </source>
-      <alias name='hostdev0'/>
       <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x0' multifunction='on'/>
     </hostdev>
     <hostdev mode='subsystem' type='pci' managed='yes'>
@@ -325,7 +250,6 @@
       <source>
         <address domain='0x0000' bus='0x06' slot='0x00' function='0x1'/>
       </source>
-      <alias name='hostdev1'/>
       <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x1'/>
     </hostdev>
     <hostdev mode='subsystem' type='usb' managed='yes'>
@@ -333,18 +257,12 @@
         <vendor id='0x256f'/>
         <product id='0xc635'/>
       </source>
-      <alias name='hostdev3'/>
       <address type='usb' bus='0' port='2'/>
     </hostdev>
-    <watchdog model='itco' action='reset'>
-      <alias name='watchdog0'/>
-    </watchdog>
+    <watchdog model='itco' action='reset'/>
     <memballoon model='none'/>
   </devices>
-  <seclabel type='dynamic' model='dac' relabel='yes'>
-    <label>+0:+0</label>
-    <imagelabel>+0:+0</imagelabel>
-  </seclabel>
+  <seclabel type='dynamic' model='dac' relabel='yes'/>
   <qemu:commandline>
     <qemu:arg value='-device'/>
     <qemu:arg value='{&apos;driver&apos;:&apos;ivshmem-plain&apos;,&apos;id&apos;:&apos;shmem0&apos;,&apos;memdev&apos;:&apos;looking-glass&apos;}'/>

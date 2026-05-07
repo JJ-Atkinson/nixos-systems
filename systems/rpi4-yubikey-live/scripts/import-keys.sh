@@ -27,21 +27,21 @@ fi
 printf 'Importing %s\n' "$public_key"
 gpg --import "$public_key"
 
-keyfp=$(gpg --import-options show-only --with-colons --import "$public_key" 2>/dev/null \
-  | awk -F: '/^fpr:/ { print $10; exit }')
+showonly_out=$(gpg --import-options show-only --with-colons --import "$public_key" 2>&1) || {
+  printf 'gpg --import-options show-only failed:\n%s\n' "$showonly_out" >&2
+  exit 1
+}
+keyfp=$(printf '%s\n' "$showonly_out" | awk -F: '/^fpr:/ { print $10; exit }')
 
 if [ -z "$keyfp" ]; then
-  printf 'Could not determine fingerprint of imported key.\n' >&2
+  printf 'Could not determine fingerprint of imported key. show-only output:\n%s\n' "$showonly_out" >&2
   exit 1
 fi
 
 printf '\nSetting ultimate trust on %s\n' "$keyfp"
-gpg --command-fd 0 --status-fd 2 --edit-key "$keyfp" >/dev/null 2>&1 <<EOF
-trust
-5
-y
-quit
-EOF
+if ! printf '%s:6:\n' "$keyfp" | gpg --import-ownertrust; then
+  printf 'WARNING: --import-ownertrust failed; continuing without trust set.\n' >&2
+fi
 
 if [ -r "$fingerprint_file" ]; then
   printf '\nIdentity summary:\n'
@@ -55,7 +55,11 @@ printf '   This populates card stubs (ssb>) in your local keyring.\n'
 
 if gpg --card-status >/dev/null 2>&1; then
   printf '\nYubiKey detected. Running gpg --card-status now ...\n'
-  gpg --card-status >/dev/null
+  card_status_output=$(gpg --card-status 2>&1) || {
+    printf 'gpg --card-status failed:\n%s\n' "$card_status_output" >&2
+    exit 1
+  }
+  printf '%s\n' "$card_status_output"
 fi
 
 if [ -r "$ssh_key" ]; then

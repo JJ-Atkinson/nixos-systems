@@ -342,29 +342,28 @@ journalctl -u libvirtd | grep virtiofsd
 - 8 P-cores (Performance): CPUs 0-15 (with HyperThreading)
 - 12 E-cores (Efficiency): CPUs 16-27 (no HyperThreading)
 
-### VM Allocation (16 vCPUs)
+### VM Allocation (12 vCPUs)
 
 ```
 ┌─────────────────────────────────────────────┐
-│ VM: 6 P-cores (12 threads) + 4 E-cores     │
+│ VM: 6 P-cores (12 threads)                 │
 ├─────────────────────────────────────────────┤
 │ P-cores 1-6: CPUs 2-13                      │
-│ E-cores 8-11: CPUs 16-19                    │
 └─────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────┐
-│ Host: 2 P-cores (4 threads) + 8 E-cores    │
+│ Host: 2 P-cores (4 threads) + 12 E-cores   │
 ├─────────────────────────────────────────────┤
 │ P-cores 0,7: CPUs 0-1, 14-15                │
-│ E-cores 12-19: CPUs 20-27                   │
-│ Emulator threads: CPUs 0-1, 14-15           │
+│ E-cores 8-19: CPUs 16-27                    │
+│ Emulator threads: CPUs 0-1, 14-27           │
 └─────────────────────────────────────────────┘
 ```
 
 ### VM XML Configuration
 
 ```xml
-<vcpu placement='static'>16</vcpu>
+<vcpu placement='static'>12</vcpu>
 <cputune>
   <!-- Pin 6 P-cores (cores 1-6): vCPU 0-11 to host CPUs 2-13 -->
   <vcpupin vcpu='0' cpuset='2'/>
@@ -379,19 +378,12 @@ journalctl -u libvirtd | grep virtiofsd
   <vcpupin vcpu='9' cpuset='11'/>
   <vcpupin vcpu='10' cpuset='12'/>
   <vcpupin vcpu='11' cpuset='13'/>
-
-  <!-- Pin 4 E-cores (cores 8-11): vCPU 12-15 to host CPUs 16-19 -->
-  <vcpupin vcpu='12' cpuset='16'/>
-  <vcpupin vcpu='13' cpuset='17'/>
-  <vcpupin vcpu='14' cpuset='18'/>
-  <vcpupin vcpu='15' cpuset='19'/>
-
-  <!-- Pin emulator threads to reserved host P-cores -->
-  <emulatorpin cpuset='0-1,14-15'/>
+  <!-- Pin emulator threads to host-reserved P-cores and E-cores -->
+  <emulatorpin cpuset='0-1,14-27'/>
 </cputune>
 
 <cpu mode='host-passthrough' check='none' migratable='off'>
-  <topology sockets='1' dies='1' clusters='1' cores='8' threads='2'/>
+  <topology sockets='1' dies='1' clusters='1' cores='6' threads='2'/>
   <cache mode='passthrough'/>
   <feature policy='require' name='topoext'/>
 </cpu>
@@ -399,7 +391,7 @@ journalctl -u libvirtd | grep virtiofsd
 
 ### Benefits
 
-- **VM sees full hybrid architecture**: Windows Thread Director correctly schedules workloads
+- **Avoids misleading hybrid topology**: Windows sees 6 real hyperthreaded P-cores instead of mixed P/E cores presented as homogeneous SMT
 - **Dedicated cores**: No CPU contention between host and guest
 - **Host responsiveness**: Reserved cores ensure smooth host operation
 - **Optimal performance**: P-cores for demanding tasks, E-cores for background work

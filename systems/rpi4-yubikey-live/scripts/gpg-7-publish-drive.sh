@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# shellcheck disable=SC2154
+trap 'rc=$?; printf "\nERROR: %s exited %d at %s:%d (cmd: %s)\n" "$(basename "$0")" "$rc" "${BASH_SOURCE[0]}" "$LINENO" "$BASH_COMMAND" >&2' ERR
 
 usage() {
   cat >&2 <<'EOF'
@@ -110,18 +112,38 @@ for sub in public public-bak master-bak; do
   fi
 done
 
-encryption_fp=$(gpg --card-status 2>/dev/null | awk -F: '/^Encryption key/ { gsub(/[[:space:]]/, "", $2); print $2; exit }')
+printf 'Checking inserted YubiKey for an encryption subkey...\n' >&2
+gpgconf --kill all >/dev/null 2>&1 || true
+
+card_status_file=$(mktemp -p /dev/shm gpg-card-status.XXXXXX)
+if ! timeout 10s gpg --card-status >"$card_status_file" 2>&1; then
+  printf '\ngpg --card-status failed or timed out. Output:\n' >&2
+  sed 's/^/  /' "$card_status_file" >&2
+  printf '\nIs a YubiKey inserted? Try: gpg --card-status\n' >&2
+  rm -f "$card_status_file"
+  exit 1
+fi
+
+encryption_fp=$(awk -F: '/^Encryption key/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' "$card_status_file")
+rm -f "$card_status_file"
+
 if [ -z "$encryption_fp" ] || [ "$encryption_fp" = "[none]" ]; then
   printf 'Inserted YubiKey has no encryption subkey on the OpenPGP applet.\n' >&2
   printf 'Run gpg-3-load-card first so the master can be encrypted to this YubiKey.\n' >&2
   exit 1
 fi
+printf 'Encryption subkey found: %s\n' "$encryption_fp" >&2
 
 export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$(gpgconf --list-dirs agent-ssh-socket)}"
 
 stage_dir=$(mktemp -d -p /dev/shm gpg-master-bak.XXXXXX)
 chmod 700 "$stage_dir"
 cleanup() {
+  rc=$?
+  if [ "$rc" -ne 0 ] && [ -d "$stage_dir" ]; then
+    printf 'Failure (rc=%d). Staging dir was %s — listing before cleanup:\n' "$rc" "$stage_dir" >&2
+    ls -la "$stage_dir" >&2 || true
+  fi
   rm -rf "$stage_dir"
 }
 trap cleanup EXIT
@@ -133,6 +155,7 @@ install -m 0755 "$restore_script" "$mount_dir/gpg-9-redundant-restore.sh"
 install -m 0755 "$import_keys_script" "$mount_dir/public/import-keys"
 
 gpg --armor --export "$keyfp" > "$mount_dir/public/public-key-gpg"
+[ -s "$mount_dir/public/public-key-gpg" ] || { printf 'gpg --armor --export %s produced empty output (key not in keyring?)\n' "$keyfp" >&2; exit 1; }
 
 ssh_output=$(ssh-add -L 2>/dev/null || true)
 if [ -z "$ssh_output" ]; then

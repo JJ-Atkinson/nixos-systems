@@ -94,11 +94,13 @@
           ./modules/pgadmin.nix
           ./modules/nix-serve.nix
           ./modules/nixos-cache.nix
+          ./modules/nixos-auto-upgrade-reboot-notifier.nix
           ./modules/hardware-dev.nix
           ./modules/ios-webkit-debug.nix
           ./modules/spacemouse.nix
           ./modules/re-clip.nix
           ./modules/virtiofsd-looking-glass.nix
+          ./modules/looking-glass-stutter-tuning.nix
           ./modules/usb-vm-passthrough.nix
 
           ./users/common.nix
@@ -109,6 +111,12 @@
             { ... }:
             {
               nixpkgs.config.allowUnfree = true;
+              services.nixosAutoUpgradeRebootNotifier = {
+                enable = true;
+                flake = "/etc/nixos#nixos";
+                updateInputs = [ "nixpkgs" "unstable" ];
+                notifyUsers = [ "jarrett" ];
+              };
             }
           )
 
@@ -148,6 +156,7 @@
           ./modules/ssh-access.nix
           ./modules/tailscale.nix
           ./modules/nixos-cache.nix
+          ./modules/nixos-auto-upgrade-reboot-notifier.nix
 
           ./users/common.nix
           ./users/jarrett.nix
@@ -157,6 +166,12 @@
             { ... }:
             {
               nixpkgs.config.allowUnfree = true;
+              services.nixosAutoUpgradeRebootNotifier = {
+                enable = true;
+                flake = "/etc/nixos#nixos-framework";
+                updateInputs = [ "nixpkgs" "unstable" ];
+                notifyUsers = [ "jarrett" ];
+              };
             }
           )
 
@@ -179,6 +194,14 @@
         modules = [
           nixos-hardware.nixosModules.raspberry-pi-4
           ./systems/rpi4-yubikey-live/default.nix
+
+          home-manager.nixosModules.home-manager
+          {
+            home-manager.useGlobalPkgs = true;
+            home-manager.useUserPackages = true;
+            home-manager.extraSpecialArgs = rpiSpecialArgs;
+            home-manager.users.jarrett = import ./systems/rpi4-yubikey-live/home.nix;
+          }
         ];
       };
 

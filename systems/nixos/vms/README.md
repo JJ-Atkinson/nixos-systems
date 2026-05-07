@@ -7,7 +7,7 @@ This directory contains libvirt VM XML configurations.
 High-performance Windows 11 VM with:
 - **GPU Passthrough**: RTX 3060 Ti + Audio (NVIDIA 10de:2489 + 10de:228b)
 - **Looking Glass**: IVSHMEM-based low-latency display (128MB shared memory)
-- **CPU Pinning**: 6 P-cores (12 threads) + 4 E-cores optimized for hybrid architecture
+- **CPU Pinning**: 6 P-cores (12 threads), avoiding mixed P/E topology in Windows
 - **VirtIO Devices**: Disk, network, keyboard, mouse
 - **USB Passthrough**: Huion Tablet (256c:006d), SpaceMouse (256f:c635)
 - **VirtioFS Shared Folder**: High-performance host folder sharing (Looking Glass compatible)
@@ -15,10 +15,62 @@ High-performance Windows 11 VM with:
 ### Storage Configuration
 
 ```
-VM Disk:    /vm-storage/images/windows11.qcow2 (500GB, btrfs with CoW enabled)
-Snapshots:  Enabled (disk-only due to GPU passthrough)
+VM Disk:    /vm-storage/images/windows11.flattened-20260506.qcow2 (500GB qcow2)
+Driver:     cache='none' io='native' discard='unmap'
+Snapshots:  Old local qcow2 chain deleted after flattening; restore from external backup if needed
 Shared Dir: ~/windows-shared → virtiofs mount 'shared' in Windows
 ```
+
+The active disk is a flattened qcow2 with no backing file. This replaced the old deep external snapshot chain to reduce storage latency variance.
+
+### Looking Glass Notes
+
+Looking Glass version is `B7` on both client and guest host.
+
+The Windows host uses D12 capture. Current best-known guest host config:
+
+```ini
+[d12]
+trackDamage=no
+```
+
+Place that in the Windows VM at:
+
+```text
+C:\Program Files\Looking Glass (host)\looking-glass-host.ini
+```
+
+Then restart the Looking Glass host service in Windows.
+
+Why this is set:
+- With `trackDamage=yes`, idle-to-large-damage transitions caused bad latency for about a dozen frames.
+- With `trackDamage=no`, Looking Glass does predictable full-frame copies and feels much smoother.
+- This trades bandwidth for frame pacing stability.
+
+At the current 4K BGRA format, one full frame is:
+
+```text
+3840 * 2160 * 4 bytes = 33,177,600 bytes = 31.64 MiB
+```
+
+Approximate full-frame copy bandwidth:
+
+| FPS | Bandwidth |
+|---:|---:|
+| 30 | 949 MiB/s |
+| 60 | 1.85 GiB/s |
+| 75 | 2.32 GiB/s |
+| 120 | 3.71 GiB/s |
+| 144 | 4.45 GiB/s |
+
+The Linux client has a local B7 patch for the performance metrics overlay crash:
+- Patch: `/etc/nixos/patches/looking-glass-b7-graph-imgui-id.patch`
+- Overlay wiring: `/etc/nixos/modules/looking-glass-stutter-tuning.nix`
+- Cause: B7 passed a raw graph pointer as an ImGui plot label, which could trip an empty-ID assertion.
+
+Optional host-side helpers from `/etc/nixos/modules/looking-glass-stutter-tuning.nix`:
+- `looking-glass-client-tuned`: runs the client on host CPUs outside the VM CPU set.
+- `looking-glass-irq-affinity status|apply`: keeps selected host IRQs off VM CPUs where the kernel allows it.
 
 ### Quick Reference
 
@@ -56,6 +108,11 @@ looking-glass-client
 # Scroll Lock + Q to quit
 ```
 
+**Connect with CPU-pinned Looking Glass client**:
+```bash
+looking-glass-client-tuned
+```
+
 ### Restoring VM Definition
 
 After NixOS rebuild or if VM definition is lost:
@@ -82,7 +139,9 @@ git commit -m "Update Windows11 VM configuration"
 
 3. **SPICE Display**: Keep SPICE enabled as fallback. Looking Glass is primary display method.
 
-4. **CPU Topology**: The VM exposes the full hybrid P-core/E-core architecture to Windows via host-passthrough.
+4. **CPU Topology**: The VM exposes 6 hyperthreaded P-cores to Windows. E-cores remain available to the host for Looking Glass, IRQs, and background work.
+
+5. **Looking Glass Damage Tracking**: Keep `[d12] trackDamage=no` unless deliberately retesting. It currently gives much smoother latency than D12 damage-aware copies.
 
 ### Documentation
 

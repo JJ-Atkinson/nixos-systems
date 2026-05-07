@@ -1,4 +1,5 @@
 autoload -Uz add-zsh-hook
+autoload -U colors && colors
 zmodload zsh/datetime
 
 setopt prompt_subst
@@ -45,9 +46,9 @@ _prompt_precmd() {
   _prompt_command_started_at=0
 
   if (( last_status == 0 )); then
-    _prompt_status="%{$fg_bold[green]%}✓%{$reset_color%}"
+    _prompt_status="%{$fg_bold[green]%}${_PROMPT_OK_GLYPH:-✓}%{$reset_color%}"
   else
-    _prompt_status="%{$fg_bold[red]%}✗ ${last_status}%{$reset_color%}"
+    _prompt_status="%{$fg_bold[red]%}${_PROMPT_FAIL_GLYPH:-✗} ${last_status}%{$reset_color%}"
   fi
 
   _prompt_git_segment="$(_prompt_git_info)"

@@ -17,6 +17,7 @@ in
 
     users.jarrett = {
       isNormalUser = true;
+      shell = pkgs.zsh;
       hashedPassword = "$6$qwHU7LepEU4KZGb1$f6t0ag76oz5N1UcEhnnUndv4ZyoJrnuF.P7pbBTaDXjHd3gEZUvxsdXdkL8j/hAs0sibQf7CT3wEBgNfSnCgQ0";
       extraGroups = [ "networkmanager" "wheel" "docker" "plugdev" "kvm" ];
       openssh.authorizedKeys.keys = [

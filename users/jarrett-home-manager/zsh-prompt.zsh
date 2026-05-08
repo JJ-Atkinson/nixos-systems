@@ -8,6 +8,7 @@ _prompt_command_started_at=0
 _prompt_command_duration=""
 _prompt_git_segment=""
 _prompt_nix_shell_segment=""
+_prompt_ssh_segment=""
 
 _prompt_epoch_ms() {
   local epoch="$1"
@@ -53,6 +54,7 @@ _prompt_precmd() {
 
   _prompt_git_segment="$(_prompt_git_info)"
   _prompt_nix_shell_segment="$(_prompt_nix_shell_info)"
+  _prompt_ssh_segment="$(_prompt_ssh_info)"
 }
 
 _prompt_git_info() {
@@ -60,9 +62,17 @@ _prompt_git_info() {
   branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null) || branch=$(git rev-parse --short HEAD 2>/dev/null) || return
 
   if [[ -n "$(git status --porcelain --ignore-submodules=dirty 2>/dev/null)" ]]; then
-    printf '%%{%%F{yellow}%%}(%s*)%%{%%f%%} ' "$branch"
+    if (( ${#branch} > 19 )); then
+      printf '%%{%%F{250}%%}(%%{%%F{yellow}%%}%s%%{%%F{blue}%%}[...]%%{%%F{250}%%})%%{%%F{yellow}%%}*%%{%%f%%} ' "${branch[1,15]}"
+    else
+      printf '%%{%%F{250}%%}(%%{%%F{yellow}%%}%s%%{%%F{250}%%})%%{%%F{yellow}%%}*%%{%%f%%} ' "$branch"
+    fi
   else
-    printf '%%{%%F{green}%%}(%s)%%{%%f%%} ' "$branch"
+    if (( ${#branch} > 19 )); then
+      printf '%%{%%F{250}%%}(%%{%%F{green}%%}%s%%{%%F{blue}%%}[...]%%{%%F{250}%%})%%{%%f%%} ' "${branch[1,15]}"
+    else
+      printf '%%{%%F{250}%%}(%%{%%F{green}%%}%s%%{%%F{250}%%})%%{%%f%%} ' "$branch"
+    fi
   fi
 }
 
@@ -81,7 +91,13 @@ _prompt_nix_shell_info() {
   fi
 }
 
+_prompt_ssh_info() {
+  [[ -n "$SSH_CONNECTION$SSH_CLIENT$SSH_TTY" ]] || return
+
+  printf '%%{%%F{250}%%}[%%{%%F{blue}%%}ssh:%%{%%F{magenta}%%}%s%%{%%F{250}%%}]%%{%%f%%} ' "${HOST%%.*}"
+}
+
 add-zsh-hook preexec _prompt_preexec
 add-zsh-hook precmd _prompt_precmd
 
-PROMPT='${_prompt_status}${_prompt_command_duration} %{$fg[cyan]%}%~%{$reset_color%} ${_prompt_git_segment}${_prompt_nix_shell_segment}%{$fg_bold[green]%}>%{$reset_color%} '
+PROMPT='${_prompt_status}${_prompt_command_duration} %{$fg[cyan]%}%~%{$reset_color%} ${_prompt_git_segment}${_prompt_ssh_segment}${_prompt_nix_shell_segment}%{$fg_bold[green]%}>%{$reset_color%} '

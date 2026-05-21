@@ -76,6 +76,9 @@
         inherit system specialArgs;
         modules = [
           sops-nix.nixosModules.sops
+          disko.nixosModules.disko
+          ./systems/nixos/disko.nix
+          ./systems/nixos/initrd-luks-tolerant.nix
           ./systems/nixos/fs-opts.nix
           ./systems/nixos/hw-opts.nix
           ./systems/nixos/etc.nix

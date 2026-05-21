@@ -83,6 +83,8 @@
           ./systems/nixos/std-backup-restic.nix
           ./systems/nixos/syncthing.nix
           ./modules/btrfs-scrub.nix
+          ./modules/disk-diagnostics.nix
+          ./modules/smart-error-watch.nix
           ./modules/desktop.nix
           # ./modules/desktop-kde.nix
           ./modules/docker.nix
@@ -117,6 +119,11 @@
                 updateInputs = [ "nixpkgs" "unstable" ];
                 notifyUsers = [ "jarrett" ];
               };
+              services.btrfsScrubNotifier.notifyUsers = [ "jarrett" ];
+              services.smartErrorWatch = {
+                enable = true;
+                notifyUsers = [ "jarrett" ];
+              };
             }
           )
 
@@ -147,6 +154,7 @@
           ./systems/nixos-framework/syncthing.nix
           ./modules/lanza.nix
           ./modules/btrfs-scrub.nix
+          ./modules/disk-diagnostics.nix
           ./modules/desktop.nix
           ./modules/virtual-machines.nix
           ./modules/docker.nix
@@ -172,6 +180,7 @@
                 updateInputs = [ "nixpkgs" "unstable" ];
                 notifyUsers = [ "jarrett" ];
               };
+              services.btrfsScrubNotifier.notifyUsers = [ "jarrett" ];
             }
           )
 
@@ -184,6 +193,21 @@
             home-manager.extraSpecialArgs = specialArgs;
 
             home-manager.users.jarrett = import ./users/jarrett-home-manager/home.nix;
+          }
+        ];
+      };
+
+      nixosConfigurations.recovery-live = nixpkgs.lib.nixosSystem {
+        inherit system specialArgs;
+        modules = [
+          ./systems/recovery-live/default.nix
+
+          home-manager.nixosModules.home-manager
+          {
+            home-manager.useGlobalPkgs = true;
+            home-manager.useUserPackages = true;
+            home-manager.extraSpecialArgs = specialArgs;
+            home-manager.users.rescue = import ./systems/recovery-live/home.nix;
           }
         ];
       };

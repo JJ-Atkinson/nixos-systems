@@ -15,9 +15,16 @@
             ESP = {
               size = "1G";
               type = "EF00";
+              # Plain vfat ESP, NOT an mdadm member. NixOS's systemd-boot
+              # installer (`bootctl install`) refuses to install onto a
+              # non-partitioned block device (md*), so we keep each ESP as a
+              # real GPT partition and mirror /boot -> /boot-fallback via
+              # boot.loader.systemd-boot.extraInstallCommands in hw-opts.nix.
               content = {
-                type = "mdraid";
-                name = "boot";
+                type = "filesystem";
+                format = "vfat";
+                mountpoint = "/boot";
+                mountOptions = [ "umask=0077" ];
               };
             };
             swap_raid = {
@@ -55,9 +62,12 @@
             ESP = {
               size = "1G";
               type = "EF00";
+              # Mirror of disk_a's ESP. extraInstallCommands keeps it in sync.
               content = {
-                type = "mdraid";
-                name = "boot";
+                type = "filesystem";
+                format = "vfat";
+                mountpoint = "/boot-fallback";
+                mountOptions = [ "umask=0077" ];
               };
             };
             swap_raid = {
@@ -132,20 +142,6 @@
     };
 
     mdadm = {
-      # Dual-ESP mirror. metadata=1.0 puts the superblock at the end of the
-      # partition so UEFI firmware can read either half as a plain FAT32.
-      boot = {
-        type = "mdadm";
-        level = 1;
-        metadata = "1.0";
-        content = {
-          type = "filesystem";
-          format = "vfat";
-          mountpoint = "/boot";
-          mountOptions = [ "umask=0077" ];
-        };
-      };
-
       # Mirrored, encrypted, hibernation-capable swap. mdadm RAID1 (metadata=1.2)
       # → LUKS (same passphrase as the btrfs pair, deduplicated by systemd's
       # initrd password cache) → swap. resumeDevice=true tells disko to set

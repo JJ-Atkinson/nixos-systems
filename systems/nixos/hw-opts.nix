@@ -13,6 +13,20 @@
   # Re-enable after reboot to clear kernel EFI variable cache
   boot.loader.efi.canTouchEfiVariables = false;
 
+  # Two-disk ESP mirror. systemd-boot installs to /boot (disk_a's ESP); after
+  # each install we rsync into /boot-fallback (disk_b's ESP) so the firmware
+  # can boot from either disk if one is lost. No --delete on the rsync so
+  # older generations on the fallback ESP aren't pruned mid-install — the ESP
+  # is 1 GiB which is comfortable for hundreds of generations; periodic
+  # cleanup can mirror nixos-rebuild's gc.
+  boot.loader.systemd-boot.extraInstallCommands = ''
+    if mountpoint -q /boot-fallback; then
+      ${pkgs.rsync}/bin/rsync -aH --info=stats1 /boot/ /boot-fallback/
+    else
+      echo "WARN: /boot-fallback not mounted; skipping ESP mirror" >&2
+    fi
+  '';
+
   # Use latest kernel.
   boot.kernelPackages = pkgs.linuxPackages_latest;
 

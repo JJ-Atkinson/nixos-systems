@@ -19,8 +19,10 @@
   # older generations on the fallback ESP aren't pruned mid-install — the ESP
   # is 1 GiB which is comfortable for hundreds of generations; periodic
   # cleanup can mirror nixos-rebuild's gc.
+  # Use absolute paths: install-systemd-boot.sh runs with a minimal PATH, so
+  # bare `mountpoint` fails ("command not found") and the mirror is always skipped.
   boot.loader.systemd-boot.extraInstallCommands = ''
-    if mountpoint -q /boot-fallback; then
+    if ${pkgs.util-linux}/bin/mountpoint -q /boot-fallback; then
       ${pkgs.rsync}/bin/rsync -aH --info=stats1 /boot/ /boot-fallback/
     else
       echo "WARN: /boot-fallback not mounted; skipping ESP mirror" >&2
@@ -40,6 +42,18 @@
   # ~512 MiB of RAM dedicated to HMB is acceptable.
   boot.kernelParams = [ "nvme.max_host_mem_size_mb=512" ];
 
+  # Periodic fstrim is redundant here and actively harmful. btrfs has enabled
+  # discard=async by default since kernel 6.2, so freed extents and released
+  # chunks are trimmed continuously in the background; the weekly sweep just
+  # re-issues discards for ranges the drives already handled.
+  #
+  # The Solidigm (nvme0n1, SSDPFKNU020TZ — QLC, DRAM-less/HMB) processes
+  # discards roughly 75x slower than the WD SN7100. On 2026-07-27 an fstrim run
+  # sat in D-state for over an hour and pinned nvme0n1 at ~79% utilisation while
+  # moving only a few MB/s, with writes queued behind it at ~15 ms latency
+  # (vs ~0.15 ms on the WD for the identical RAID1 mirror writes). Both drives
+  # were healthy at the time: 0 media errors, 100% spare, no thermal events.
+  services.fstrim.enable = false;
 
   # Pick only one of the below networking options.
   # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.

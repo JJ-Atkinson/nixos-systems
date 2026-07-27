@@ -12,6 +12,11 @@
     ucodenix.url = "github:e-tho/ucodenix";
     disko.url = "github:nix-community/disko";
     disko.inputs.nixpkgs.follows = "nixpkgs";
+    claude-code-nix = {
+      url = "github:sadjow/claude-code-nix";
+      inputs.nixpkgs.follows = "unstable";
+      inputs.flake-utils.follows = "flake-utils";
+    };
     lanzaboote = {
       url = "github:nix-community/lanzaboote/v1.0.0";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -33,6 +38,7 @@
       home-manager,
       ucodenix,
       disko,
+      claude-code-nix,
       lanzaboote,
       ...
     }@inputs:
@@ -49,11 +55,13 @@
         inherit system;
         config.allowUnfree = true;
       };
+      claudeCode = claude-code-nix.packages.${system}.claude-code;
 
       # Pass them to modules under the names you prefer
       specialArgs = {
         nixpkgs = nixpkgsStable;
         nixpkgsUnstable = nixpkgsUnstable;
+        inherit claudeCode;
         inherit inputs nixos-hardware;
       };
 
@@ -65,9 +73,11 @@
         system = rpiSystem;
         config.allowUnfree = true;
       };
+      rpiClaudeCode = claude-code-nix.packages.${rpiSystem}.claude-code;
       rpiSpecialArgs = {
         nixpkgs = rpiPkgs;
         nixpkgsUnstable = rpiUnstable;
+        claudeCode = rpiClaudeCode;
         inherit inputs nixos-hardware;
       };
     in
@@ -96,6 +106,7 @@
           ./modules/networking.nix
           ./modules/ssh-access.nix
           ./modules/tailscale.nix
+          ./modules/share-public
           ./modules/pgadmin.nix
           ./modules/nix-serve.nix
           ./modules/nixos-cache.nix
@@ -241,7 +252,7 @@
           nixpkgsStable.ssh-to-pgp
           nixpkgsStable.age
           nixpkgsStable.deploy-rs
-          nixpkgsUnstable.claude-code
+          claudeCode
         ];
       };
     };

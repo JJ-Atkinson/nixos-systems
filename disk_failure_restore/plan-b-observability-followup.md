@@ -2,7 +2,7 @@
 
 ## Context
 
-This is the follow-up plan to `plan-a-disko-raid1-install.md`. Plan A installs a RAID1 btrfs across WD + Solidigm with mdadm-mirrored ESP and swap. Plan A is **self-contained for bootability and disk-loss survival** — what it does *not* do is observably surface degradation while the system is running. Given this desktop's 90+ day uptime profile and the prior WD SN7100 incident pattern (silent media-error growth → eventual btrfs forced-RO → crash), runtime observability is essential.
+This is the follow-up plan to `plan-a-disko-raid1-install.md`. Plan A installs a RAID1 btrfs across WD + Solidigm with mdadm-mirrored swap and **two separate vfat ESPs** kept in sync via `boot.loader.systemd-boot.extraInstallCommands` (the plan-A choice of mdadm-RAID1 ESPs was reversed during install — NixOS's `bootctl install` refuses to write to a non-partitioned block device, so each ESP is a real GPT partition mounted at `/boot` and `/boot-fallback`). Plan A is **self-contained for bootability and disk-loss survival** — what it does *not* do is observably surface degradation while the system is running. Given this desktop's 90+ day uptime profile and the prior WD SN7100 incident pattern (silent media-error growth → eventual btrfs forced-RO → crash), runtime observability is essential.
 
 Plan B is additive, no-data-risk, and can be done in pieces after the migration is verified.
 
@@ -24,10 +24,11 @@ Gaps Plan B closes:
 | Failure signal | Current coverage | Plan B addition |
 |---|---|---|
 | btrfs forced read-only event | none | `btrfs-ro-watch` — journald follower |
-| mdadm array degradation | none | `mdadm-degraded-watch` — wraps `mdadm --monitor` |
+| mdadm `md/swap` degradation (the only remaining mdadm array) | none | `mdadm-degraded-watch` — wraps `mdadm --monitor` |
 | Missing/dropped device at boot | none | `boot-disk-presence-check` — oneshot + hourly timer |
 | btrfs `device stats` growth between weekly scrubs | only after weekly scrub | Opportunistic timer (~hourly) reusing the existing state file |
 | Disk silently dropped during long uptime | partial — `smart-error-watch` would skip missing device silently | Same `boot-disk-presence-check` covers it via hourly timer |
+| `/boot` and `/boot-fallback` diverging (silent `extraInstallCommands` rsync failure) | none — divergence accumulates invisibly | `esp-parity-watch` — daily diff |
 
 ## B.2 New module: `modules/disk-fleet-watch.nix`
 
@@ -43,12 +44,15 @@ Catches the exact event class that's been crashing the desktop on the failing SN
 
 `Type=simple`. Wraps `mdadm --monitor --scan --program=<notify-wrapper>`. mdadm calls the wrapper on every event (`DegradedArray`, `FailSpare`, `Fail`, etc.) with the array and device as positional args; the wrapper translates that to a `notifyScript` call. Restart=always.
 
+Scope is now just `md/swap` — the post-install architecture has no other mdadm array (boot moved to two plain vfat ESPs). The PROGRAM hook here also subsumes the `boot.swraid.mdadmConf = "MAILADDR root@localhost"` stub that Plan A set as a placeholder so `mdmon` would start; once this service is wired, drop the MAILADDR stub from `systems/nixos/fs-opts.nix` and set `boot.swraid.mdadmConf = "PROGRAM /run/current-system/sw/bin/<notify-wrapper>";` (or equivalent) so the kernel/mdadm path and this user-watcher path are wired through the same notification.
+
 ### B.2.c `boot-disk-presence-check.service` + `.timer`
 
 Oneshot. Runs after `multi-user.target` on every boot, and again hourly via timer. Checks:
 
 - `btrfs filesystem show /` lists the expected two devices, both with non-zero size.
-- `cat /proc/mdstat` shows both `md/boot` and `md/swap` with `[UU]` (or warns on `[U_]` / `[_U]`).
+- `cat /proc/mdstat` shows `md/swap` with `[UU]` (warns on `[U_]` / `[_U]`). `md/boot` no longer exists; ESP presence is a separate check.
+- `findmnt /boot` and `findmnt /boot-fallback` both return a mount. If either is missing the corresponding disk's ESP is gone — boot still works from the other but the redundancy is broken.
 - Each expected serial number (recorded once at first run into `/var/lib/disk-fleet-watch/expected-sns`) is present in `lsblk -o SERIAL`.
 
 On any divergence: `notifyScript` critical + `logger`. Hourly cadence handles the "uptime 30 days, disk silently dropped two days ago" case — without this, `smart-error-watch` would skip the missing drive without raising any alarm.
@@ -58,6 +62,17 @@ On any divergence: `notifyScript` critical + `logger`. Hourly cadence handles th
 Hourly. Wraps the same `btrfs device stats` delta logic that `modules/btrfs-scrub.nix`'s `checkScript` already implements (lines 51–87). Read the same state file (`/var/lib/btrfs-scrub-notifier/root.stats`) to avoid maintaining a second baseline. On growth between scrubs, `notifyScript` critical.
 
 Implementation note: factor the delta-check awk snippet out of `btrfs-scrub.nix:checkScript` into a shared shell function/script so both modules call the same logic.
+
+### B.2.e `esp-parity-watch.service` + `.timer`
+
+Daily. Catches silent divergence between `/boot` (the primary, written by `bootctl install`) and `/boot-fallback` (mirrored only via `boot.loader.systemd-boot.extraInstallCommands`). If the rsync ever fails — disk full, mountpoint missing, transient I/O error — divergence accumulates invisibly and the fallback ESP eventually stops being able to boot the current generation.
+
+Two reasonable check shapes; pick at implementation time:
+
+1. `diff -rq /boot /boot-fallback | wc -l` — count divergent paths. Hardest to make precise because nixos-rebuild creates new files in `/boot/EFI/nixos/` between runs but only mirrors on bootloader-install (which doesn't fire on every rebuild). Some lag is expected; threshold accordingly.
+2. Verify the *current* generation's kernel + initrd + loader entry exist in both. Source of truth: `/boot/loader/entries/nixos-generation-N.conf` where N is the highest. If the same files exist in `/boot-fallback`, the fallback can boot what the primary boots — that's the resilience property we actually care about. (Recommended; smaller false-positive surface than full diff.)
+
+On divergence: `notifyScript` warning (not critical — boot still works from primary; only redundancy is lost) + `logger`. Daily cadence is fine; this is a slow-decay signal, not an active-failure one.
 
 ## B.3 Adjustments to existing modules
 
@@ -71,6 +86,16 @@ Changes:
 - Drop the stagger override for `btrfs-scrub-vm\\x2dstorage-images` (no longer a separate timer).
 - Drop the daily-scrub override on `/` (line ~120 of the existing module). That override exists specifically because of the failing SN7100; once RAID1 is in place and the failing drive is RMA'd, weekly is appropriate.
 - Verify the per-scrub `checkScript` ExecStopPost still hooks correctly to the single remaining scrub unit.
+
+### `systems/nixos/fs-opts.nix`
+
+Plan A's install set a stub there so `mdmon` would start cleanly during the first activation:
+
+```nix
+boot.swraid.mdadmConf = "MAILADDR root@localhost";
+```
+
+`mdmon` crashes on start if neither `MAILADDR` nor `PROGRAM` is set, but `root@localhost` has nowhere to deliver to (no MTA on this host). Replace with a `PROGRAM` hook that funnels mdadm's own degraded-array events into the same `notifyScript` used by `mdadm-degraded-watch` (B.2.b). The two paths catch slightly different things: `mdadm --monitor` runs while the system is up; `mdmon` is the per-array shepherd that detects faults via kernel events. Routing both through the same notifier keeps the user surface consistent.
 
 ### `modules/smart-error-watch.nix`
 
@@ -89,6 +114,7 @@ For each new service, simulate the signal and confirm the notification fires:
 - **mdadm-degraded-watch:** `mdadm --fail /dev/md/swap <member>` then `mdadm --remove`; confirm critical notify-send. Re-add with `mdadm --add` to restore.
 - **boot-disk-presence-check:** with one disk deleted via `echo 1 > /sys/block/.../device/delete`, run the service manually and confirm notify-send fires. Confirm the hourly timer is `active (waiting)`.
 - **btrfs-stats-watch:** dd a small write to a known bad-block area (or wait for natural growth; alternatively, `btrfs scrub start` then immediately stop to bump a counter). Confirm notify-send.
+- **esp-parity-watch:** `sudo rm /boot-fallback/loader/entries/nixos-generation-<N>.conf` (where N is the current generation) and run the service manually. Confirm warning notify-send fires. Restore with another `nixos-rebuild switch` (triggers `extraInstallCommands`) or manual `rsync`.
 
 For the module cleanups:
 
@@ -100,3 +126,27 @@ For the module cleanups:
 - Email/SMS alerting on top of desktop notify-send. Notify-send to logged-in users is sufficient given the user-presence pattern (this is a personal desktop).
 - Centralizing the three nearly-identical `notifyScript` shell blocks into a single nix-store helper. Worth doing as a small refactor before B.2 lands; tracked as a sub-step but not load-bearing for the resilience properties.
 - Snapshot-based recovery — explicitly excluded per recorded preference.
+
+## B.6 Plan A install deferrals (not strictly Plan B, but pending)
+
+These are work items left open at the end of the Plan A install, separate from observability. Tracked here so they don't get lost.
+
+### FIDO2 unlock for the three LUKS containers
+
+Skipped during the destructive install (YubiKey not plugged in, and we wanted to verify the typed-passphrase path on cold boot first before layering FIDO2). To enable, two things have to land together:
+
+1. **Add `crypttabExtraOpts` to each LUKS container in `systems/nixos/disko.nix`.** Disko spreads `settings` directly into `boot.initrd.luks.devices.<name>`, so adding `settings.crypttabExtraOpts = [ "fido2-device=auto" ];` to each of `cryptbtrfs_a`, `cryptbtrfs_b`, `cryptswap` is enough — no NixOS-side override needed. Without this the initrd cryptsetup just prompts for passphrase even though a FIDO2 keyslot exists.
+
+2. **Enroll the FIDO2 keyslots.** With the YubiKey plugged in:
+
+   ```bash
+   sudo systemd-cryptenroll /dev/disk/by-partlabel/disk-disk_a-crypt --fido2-device=auto
+   sudo systemd-cryptenroll /dev/disk/by-partlabel/disk-disk_b-crypt --fido2-device=auto
+   sudo systemd-cryptenroll /dev/md/swap                              --fido2-device=auto
+   ```
+
+   Each command asks for the existing passphrase to verify unlock, then asks for a YubiKey touch.
+
+`nixos-rebuild switch` between the two is fine — initrd just won't try FIDO2 until the keyslots exist. Order is: (1) edit + rebuild, (2) enroll, (3) reboot to test.
+
+Plan-A §A.6 documents the 3-touch symmetric (default) vs 1-touch asymmetric choice. Re-evaluate after the first FIDO2 cold boot.

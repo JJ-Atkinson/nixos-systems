@@ -1,4 +1,4 @@
-{ config, nixpkgs, nixpkgsUnstable, environment, lib, ... }:
+{ config, nixpkgs, nixpkgsUnstable, claudeCode, environment, lib, ... }:
 
 let
   # system-jdk = (nixpkgsUnstable.jdk25.override { enableJavaFX = true; });
@@ -9,6 +9,10 @@ let
         --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [ nixpkgsUnstable.stdenv.cc.cc.lib ]}"
     '';
   });
+  keycount-daemon = nixpkgs.runCommandCC "keycount-daemon" { } ''
+    mkdir -p $out/bin
+    $CC -O2 -Wall -Wextra -o $out/bin/keycount-daemon ${./keycount/keycount-daemon.c}
+  '';
 in {
   imports = [
     ./zsh-hm-config.nix
@@ -22,6 +26,7 @@ in {
   home.packages = with nixpkgs; [
     jetbrains.idea
     devtoolbox
+    telegram-desktop
     nixpkgsUnstable.vscode-fhs
     nixpkgsUnstable.zed-editor
     discord
@@ -69,7 +74,7 @@ in {
     nixpkgsUnstable.proton-pass
     nixpkgsUnstable.imagemagick
     transmission_4-gtk
-    nixpkgsUnstable.claude-code
+    claudeCode
     nixpkgsUnstable.appimage-run
     opencodeWithLibstdcpp
 
@@ -115,6 +120,7 @@ in {
     libimobiledevice
     ios-webkit-debug-proxy
 
+    keycount-daemon
   ];
   # This value determines the Home Manager release that your
   # configuration is compatible with. This helps avoid breakage
@@ -145,7 +151,7 @@ in {
   programs.git.enable = true;
   programs.git.iniContent = { 
     user.name = "jarrett";
-    user.email = "jarrett@freeformsoftware.dev";
+    user.email = "16200906+JJ-Atkinson@users.noreply.github.com";
    # Disabled when I'm working remotely
     user.signingkey = "1B78F90203495DE0";
     commit.gpgsign = "true";
@@ -160,6 +166,57 @@ in {
   home.file.".clojure/deps.edn".source = ./clojure-global-deps.edn;
   # home.file.".m2/settings.xml".source = ./maven-settings.xml;
   home.file.".ideavimrc".source = ./.ideavimrc;
+
+  # Daily key/space counter: C daemon counts via evdev (keyd virtual kb);
+  # GNOME extension only displays ~/.local/share/keycount/stats.json
+  xdg.dataFile."gnome-shell/extensions/keycount@local".source = ./extensions + "/keycount@local";
+
+  systemd.user.services.keycount-daemon = {
+    Unit = {
+      Description = "Count key presses per day (no keylogging)";
+      After = [ "graphical-session.target" ];
+    };
+    Service = {
+      ExecStart = "${keycount-daemon}/bin/keycount-daemon";
+      Restart = "on-failure";
+      RestartSec = "2";
+    };
+    Install = {
+      WantedBy = [ "default.target" ];
+    };
+  };
+
+  dconf.settings = {
+    "org/gnome/shell" = {
+      disable-user-extensions = false;
+      enabled-extensions = [ "keycount@local" ];
+    };
+    # Workspace left/right (free Super+h from minimize, Super+l from lock)
+    "org/gnome/desktop/wm/keybindings" = {
+      minimize = [ ];
+      switch-to-workspace-left = [ "<Super>h" ];
+      switch-to-workspace-right = [ "<Super>l" ];
+    };
+    "org/gnome/settings-daemon/plugins/media-keys" = {
+      screensaver = [ ]; # was <Super>l
+      custom-keybindings = [
+        "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/"
+        "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/"
+      ];
+    };
+    # Existing interactive screenshot (was set outside HM)
+    "org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0" = {
+      name = "Screenshot";
+      command = "gdbus call --session --dest org.gnome.Shell.Screenshot --object-path /org/gnome/Shell/Screenshot --method org.gnome.Shell.Screenshot.InteractiveScreenshot";
+      binding = "<Super>Delete";
+    };
+    # reclip: strip 1Password clipboard metadata (modules/re-clip.nix)
+    "org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1" = {
+      name = "reclip";
+      command = "reclip";
+      binding = "<Control><Alt>c";
+    };
+  };
   # home.file.".aws/config".source = ./aws-config;
   # home.file.".aws/credentials".source = ./aws-credentials;
   home.file.".datomic/dev-local.edn".source = ./datomic-dev-local.edn;
@@ -211,6 +268,64 @@ in {
   #   enable = true;
   # };
 
+  # Open on GNOME/Wayland graphical login only (XDG autostart; not SSH).
+  xdg.configFile = lib.listToAttrs (
+    map
+      (app: {
+        name = "autostart/${app.id}.desktop";
+        value.text = ''
+          [Desktop Entry]
+          Type=Application
+          Name=${app.name}
+          Exec=${app.exec}
+          Terminal=false
+          X-GNOME-Autostart-enabled=true
+        '';
+      })
+      [
+        {
+          id = "slack";
+          name = "Slack";
+          exec = "${nixpkgs.slack}/bin/slack -s";
+        }
+        {
+          id = "firefox";
+          name = "Firefox";
+          exec = "${nixpkgsUnstable.firefox}/bin/firefox";
+        }
+        {
+          id = "deezer";
+          name = "Deezer";
+          exec = "${nixpkgsUnstable.brave}/bin/brave --profile-directory=Default --app-id=dbjlimibnhmfcgadnpbfgkmmeijhieif";
+        }
+        {
+          id = "ghostty";
+          name = "Ghostty";
+          exec = "${nixpkgsUnstable.ghostty}/bin/ghostty --gtk-single-instance=true";
+        }
+        {
+          id = "discord";
+          name = "Discord";
+          exec = "${nixpkgs.discord}/bin/Discord";
+        }
+        {
+          id = "1password";
+          name = "1Password";
+          exec = "1password";
+        }
+        {
+          id = "chromium";
+          name = "Chromium";
+          exec = "${nixpkgs.chromium}/bin/chromium";
+        }
+        {
+          id = "nautilus";
+          name = "Files";
+          exec = "nautilus";
+        }
+      ]
+  );
+
   xdg.desktopEntries = {
     sys-hibernate = {
       name = "System Hibernate";
@@ -218,25 +333,43 @@ in {
       terminal = false;
       type = "Application";
     };
-    ghostty-belafonte-day = {
-      name = "Ghostty (Belafonte Day)";
-      exec = ''ghostty "--theme=Belafonte Day"'';
+    # Titlebar colors from worktree VS Code settings (hai / scoria) + orange.
+    # green 35de8f, blue A0CFD3, purple 9a7aa0, yellow d1d133, orange E89B5C
+    ghostty-green = {
+      name = "Ghostty Green";
+      exec = "ghostty --window-theme=ghostty --window-titlebar-background=35de8f --window-titlebar-foreground=000000";
       terminal = false;
       type = "Application";
       icon = "com.mitchellh.ghostty";
       categories = [ "System" "TerminalEmulator" ];
     };
-    ghostty-coffee-theme = {
-      name = "Ghostty (Coffee Theme)";
-      exec = ''ghostty "--theme=Coffee Theme"'';
+    ghostty-blue = {
+      name = "Ghostty Blue";
+      exec = "ghostty --window-theme=ghostty --window-titlebar-background=A0CFD3 --window-titlebar-foreground=000000";
       terminal = false;
       type = "Application";
       icon = "com.mitchellh.ghostty";
       categories = [ "System" "TerminalEmulator" ];
     };
-    ghostty-everforest-light-med = {
-      name = "Ghostty (Everforest Light Med)";
-      exec = ''ghostty "--theme=Everforest Light Med"'';
+    ghostty-purple = {
+      name = "Ghostty Purple";
+      exec = "ghostty --window-theme=ghostty --window-titlebar-background=9a7aa0 --window-titlebar-foreground=ffffff";
+      terminal = false;
+      type = "Application";
+      icon = "com.mitchellh.ghostty";
+      categories = [ "System" "TerminalEmulator" ];
+    };
+    ghostty-yellow = {
+      name = "Ghostty Yellow";
+      exec = "ghostty --window-theme=ghostty --window-titlebar-background=d1d133 --window-titlebar-foreground=000000";
+      terminal = false;
+      type = "Application";
+      icon = "com.mitchellh.ghostty";
+      categories = [ "System" "TerminalEmulator" ];
+    };
+    ghostty-orange = {
+      name = "Ghostty Orange";
+      exec = "ghostty --window-theme=ghostty --window-titlebar-background=E89B5C --window-titlebar-foreground=000000";
       terminal = false;
       type = "Application";
       icon = "com.mitchellh.ghostty";

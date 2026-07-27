@@ -1,0 +1,9 @@
+{
+  "uuid": "keycount@local",
+  "name": "Key Count",
+  "description": "Counts key presses and spaces per day (no keylogging). Shows totals in the top bar.",
+  "version": 1,
+  "shell-version": ["45", "46", "47", "48", "49"],
+  "url": "https://local/keycount",
+  "session-modes": ["user"]
+}

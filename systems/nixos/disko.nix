@@ -41,6 +41,7 @@
                 name = "cryptbtrfs_a";
                 askPassword = true;
                 settings.allowDiscards = true;
+                settings.crypttabExtraOpts = [ "fido2-device=auto" ];
                 # No btrfs content here — disko opens this LUKS first; mkfs.btrfs
                 # runs from disk_b and references /dev/mapper/cryptbtrfs_a as a
                 # second device via extraArgs.
@@ -84,6 +85,7 @@
                 name = "cryptbtrfs_b";
                 askPassword = true;
                 settings.allowDiscards = true;
+                settings.crypttabExtraOpts = [ "fido2-device=auto" ];
                 content = {
                   type = "btrfs";
                   extraArgs = [
@@ -155,6 +157,7 @@
           name = "cryptswap";
           askPassword = true;
           settings.allowDiscards = true;
+          settings.crypttabExtraOpts = [ "fido2-device=auto" ];
           content = {
             type = "swap";
             resumeDevice = true;

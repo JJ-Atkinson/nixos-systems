@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+nix flake lock --update-input claude-code-nix
+
+if [[ $# -gt 0 ]]; then
+  sudo nixos-rebuild switch --flake ".#$1"
+else
+  cat <<'EOF'
+
+Updated claude-code-nix in flake.lock.
+
+Rebuild with one of:
+  sudo nixos-rebuild switch --flake /etc/nixos#nixos
+  sudo nixos-rebuild switch --flake /etc/nixos#nixos-framework
+
+Or run this script with a host name:
+  bin/update-claude nixos
+  bin/update-claude nixos-framework
+EOF
+fi

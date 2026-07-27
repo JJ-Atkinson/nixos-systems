@@ -90,7 +90,7 @@
   programs.gnupg.agent = {
     enable = true;
     enableSSHSupport = true;
-    # pinentryPackage = 
+    pinentryPackage = nixpkgs.pinentry-gnome3;
   };
 
   hardware.graphics = {

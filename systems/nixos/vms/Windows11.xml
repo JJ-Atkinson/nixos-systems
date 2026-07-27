@@ -190,7 +190,6 @@
     </controller>
     <filesystem type='mount' accessmode='passthrough'>
       <driver type='virtiofs'/>
-      <binary path='/nix/store/vw6vbapxh9dwaw8mhs3pyzlbr7bks6kk-virtiofsd-1.13.2-looking-glass/bin/virtiofsd'/>
       <source dir='/home/jarrett/windows-shared'/>
       <target dir='shared'/>
       <address type='pci' domain='0x0000' bus='0x02' slot='0x00' function='0x0'/>
@@ -241,14 +240,14 @@
     <hostdev mode='subsystem' type='pci' managed='yes'>
       <driver name='vfio'/>
       <source>
-        <address domain='0x0000' bus='0x06' slot='0x00' function='0x0'/>
+        <address domain='0x0000' bus='0x05' slot='0x00' function='0x0'/>
       </source>
       <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x0' multifunction='on'/>
     </hostdev>
     <hostdev mode='subsystem' type='pci' managed='yes'>
       <driver name='vfio'/>
       <source>
-        <address domain='0x0000' bus='0x06' slot='0x00' function='0x1'/>
+        <address domain='0x0000' bus='0x05' slot='0x00' function='0x1'/>
       </source>
       <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x1'/>
     </hostdev>

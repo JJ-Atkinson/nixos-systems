@@ -1,8 +1,11 @@
-{nixpkgs, config, ...}:
+{nixpkgsUnstable, config, ...}:
 
 {
-  environment.systemPackages = [ nixpkgs.tailscale ];
-  services.tailscale.enable = true;
+  environment.systemPackages = [ nixpkgsUnstable.tailscale ];
+  services.tailscale = {
+    enable = true;
+    package = nixpkgsUnstable.tailscale;
+  };
 
   networking.firewall = {
     enable = true;

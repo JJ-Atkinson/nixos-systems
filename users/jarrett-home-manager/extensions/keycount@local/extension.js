@@ -24,7 +24,7 @@ function formatCompact(n) {
 }
 
 function emptyDay() {
-    return {keys: 0, spaces: 0, chords: 0, mods: 0};
+    return {keys: 0, spaces: 0, chords: 0, mods: 0, peakWpm: 0};
 }
 
 function normalizeDay(v) {
@@ -33,6 +33,7 @@ function normalizeDay(v) {
         spaces: Number(v?.spaces) || 0,
         chords: Number(v?.chords) || 0,
         mods: Number(v?.mods) || 0,
+        peakWpm: Number(v?.peak_wpm) || 0,
     };
 }
 
@@ -84,6 +85,9 @@ class Indicator extends PanelMenu.Button {
         this._todayMods = new PopupMenu.PopupMenuItem('Bare modifiers: —', {reactive: false});
         this.menu.addMenuItem(this._todayMods);
 
+        this._todayPeak = new PopupMenu.PopupMenuItem('Peak WPM (burst): —', {reactive: false});
+        this.menu.addMenuItem(this._todayPeak);
+
         this._sourceItem = new PopupMenu.PopupMenuItem('Source: keycount-daemon (evdev)', {reactive: false});
         this.menu.addMenuItem(this._sourceItem);
 
@@ -113,11 +117,12 @@ class Indicator extends PanelMenu.Button {
         this._label.text = text;
     }
 
-    setToday({keys, spaces, chords, mods}) {
+    setToday({keys, spaces, chords, mods, peakWpm}) {
         this._todayKeys.label.text = `Today keys: ${keys.toLocaleString()}`;
         this._todaySpaces.label.text = `Spaces / ~words: ${spaces.toLocaleString()}`;
         this._todayChords.label.text = `Chords (ctrl/alt/super+…): ${chords.toLocaleString()}`;
         this._todayMods.label.text = `Bare modifiers: ${mods.toLocaleString()}`;
+        this._todayPeak.label.text = `Peak WPM (burst): ${Math.round(peakWpm)}`;
     }
 
     setSource(text) {
@@ -127,7 +132,8 @@ class Indicator extends PanelMenu.Button {
     setWeek(rows, totals) {
         this._weekTotalItem.label.text =
             `Week total: ${totals.keys.toLocaleString()} keys · ` +
-            `${totals.spaces.toLocaleString()}w · ${totals.chords.toLocaleString()} chords`;
+            `${totals.spaces.toLocaleString()}w · ${totals.chords.toLocaleString()} chords · ` +
+            `peak ${Math.round(totals.peakWpm)} wpm`;
 
         for (const item of this._historyItems)
             item.destroy();
@@ -142,7 +148,8 @@ class Indicator extends PanelMenu.Button {
             const label =
                 `${row.date}${mark}  ·  ${row.keys.toLocaleString()} keys` +
                 `  ·  ${row.spaces.toLocaleString()}w` +
-                `  ·  ${row.chords.toLocaleString()} chords`;
+                `  ·  ${row.chords.toLocaleString()} chords` +
+                `  ·  ${Math.round(row.peakWpm)} wpm`;
             const item = new PopupMenu.PopupMenuItem(label, {reactive: false});
             this.menu.addMenuItem(item, insertAt);
             if (insertAt >= 0)
@@ -231,6 +238,7 @@ export default class KeyCountExtension extends Extension {
             totals.spaces += day.spaces;
             totals.chords += day.chords;
             totals.mods += day.mods;
+            totals.peakWpm = Math.max(totals.peakWpm, day.peakWpm);
         }
         return {rows, totals};
     }

@@ -32,9 +32,18 @@
 #define RESCAN_MS 5000
 #define SAVE_MS 3000
 
+/* Peak-WPM burst detection: rolling window of inter-key gaps (typing keys only).
+ * Window pre-filled with GAP_LONG_MS+1 so it starts invalidated (no warmup flag). */
+#define GAP_WINDOW 40
+#define GAP_LONG_MS 2000    /* gap over this = idle/pause, excluded from rate */
+#define GAP_MAX_LONG 10     /* more than this many long gaps in window -> invalid */
+#define WPM_CAP 400.0       /* reject glitch spikes above this */
+#define WORD_CHARS 5.0      /* standard: 1 word ~= 5 chars */
+
 struct day {
     char date[16];
     uint64_t keys, spaces, chords, mods;
+    double peak_wpm;
 };
 
 struct state {
@@ -48,9 +57,70 @@ struct state {
 static struct state g;
 static volatile sig_atomic_t g_run = 1;
 
+/* Rolling inter-key gap window (session-global; peak stored per-day). */
+static int32_t g_gaps[GAP_WINDOW];
+static int g_gap_head;
+static long g_last_key_ms; /* monotonic ms of previous typing key; 0 = none yet */
+
 static void on_signal(int sig) {
     (void)sig;
     g_run = 0;
+}
+
+static long mono_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000L + ts.tv_nsec / 1000000L;
+}
+
+static void gaps_init(void) {
+    for (int i = 0; i < GAP_WINDOW; i++)
+        g_gaps[i] = GAP_LONG_MS + 1; /* start invalidated: all "long" */
+    g_gap_head = 0;
+    g_last_key_ms = 0;
+}
+
+/* Called on each typing keypress. Pushes the new gap, then updates today's
+ * peak WPM if the window is a valid burst. */
+static void update_peak(int idx) {
+    long now = mono_ms();
+    if (g_last_key_ms == 0) { /* first typing key: seed, no gap yet */
+        g_last_key_ms = now;
+        return;
+    }
+    long gap = now - g_last_key_ms;
+    g_last_key_ms = now;
+    if (gap < 0)
+        gap = 0;
+    if (gap > INT32_MAX)
+        gap = INT32_MAX;
+    g_gaps[g_gap_head] = (int32_t)gap;
+    g_gap_head = (g_gap_head + 1) % GAP_WINDOW;
+
+    int long_count = 0, n = 0;
+    long sum = 0;
+    for (int i = 0; i < GAP_WINDOW; i++) {
+        if (g_gaps[i] > GAP_LONG_MS)
+            long_count++;
+        else {
+            sum += g_gaps[i];
+            n++;
+        }
+    }
+    if (long_count > GAP_MAX_LONG) /* too many pauses -> not a burst */
+        return;
+    if (n == 0)
+        return;
+    if (sum < 1)
+        sum = 1;
+    double keys_per_sec = (double)n * 1000.0 / (double)sum;
+    double wpm = keys_per_sec * 60.0 / WORD_CHARS;
+    if (wpm > WPM_CAP)
+        return;
+    if (wpm > g.days[idx].peak_wpm) {
+        g.days[idx].peak_wpm = wpm;
+        g.dirty = true;
+    }
 }
 
 static void today_str(char out[16]) {
@@ -128,6 +198,7 @@ static void load_stats(void) {
             if (!end)
                 continue;
             uint64_t keys = 0, spaces = 0, chords = 0, mods = 0;
+            double peak_wpm = 0;
             char tmp = *end;
             *end = 0;
             char *k;
@@ -139,6 +210,8 @@ static void load_stats(void) {
                 sscanf(k, "\"chords\"%*[^0-9]%lu", &chords);
             if ((k = strstr(block, "\"mods\"")))
                 sscanf(k, "\"mods\"%*[^0-9]%lu", &mods);
+            if ((k = strstr(block, "\"peak_wpm\"")))
+                sscanf(k, "\"peak_wpm\"%*[^0-9.]%lf", &peak_wpm);
             *end = tmp;
 
             if (find_day(date) >= 0)
@@ -151,6 +224,7 @@ static void load_stats(void) {
             g.days[idx].spaces = spaces;
             g.days[idx].chords = chords;
             g.days[idx].mods = mods;
+            g.days[idx].peak_wpm = peak_wpm;
             p = end;
         }
     }
@@ -178,10 +252,12 @@ static void save_stats(void) {
     fputs("{\n", f);
     for (int i = 0; i < g.ndays; i++) {
         fprintf(f,
-                "  \"%s\": {\"keys\": %lu, \"spaces\": %lu, \"chords\": %lu, \"mods\": %lu}%s\n",
+                "  \"%s\": {\"keys\": %lu, \"spaces\": %lu, \"chords\": %lu, "
+                "\"mods\": %lu, \"peak_wpm\": %.1f}%s\n",
                 g.days[i].date, (unsigned long)g.days[i].keys,
                 (unsigned long)g.days[i].spaces, (unsigned long)g.days[i].chords,
-                (unsigned long)g.days[i].mods, i + 1 < g.ndays ? "," : "");
+                (unsigned long)g.days[i].mods, g.days[i].peak_wpm,
+                i + 1 < g.ndays ? "," : "");
     }
     fputs("}\n", f);
     fclose(f);
@@ -360,6 +436,7 @@ static void handle_key(uint16_t code, int32_t value) {
         g.days[idx].keys++;
         if (code == KEY_SPACE)
             g.days[idx].spaces++;
+        update_peak(idx);
     }
     g.dirty = true;
     (void)shift_down;
@@ -371,6 +448,7 @@ int main(void) {
 
     memset(&g, 0, sizeof(g));
     g.today_idx = -1;
+    gaps_init();
     load_stats();
     ensure_today();
 

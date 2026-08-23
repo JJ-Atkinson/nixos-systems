@@ -12,6 +12,13 @@
 // A failed attempt of either kind puts the client in a 5s cooldown and is
 // printed to the console of the `share-public` run that owns this process.
 //
+// -nogate-path <prefix> (repeatable) carves out an exception: GET/HEAD under
+// that prefix is served straight through with no auth at all. It exists for
+// metadata a third party must fetch while holding none of this run's secrets —
+// OIDC/OAuth discovery, JWKS, .well-known probes — where the magic-link path's
+// 302+cookie would only bounce a tokenless machine client to the login screen.
+// Writes are never exempted, and matching is by whole path segment.
+//
 // Secrets live only in this process's memory: they are generated at startup,
 // printed once to the operator's terminal, and die with it. There is no
 // persistence and no way to set them by hand — a run that is over cannot be
@@ -86,6 +93,8 @@ func main() {
 	publicHost := flag.String("public-host", "", "hostname clients reach this by")
 	bastion := flag.String("bastion", "", "address allowed to reach -listen (banner only)")
 	path := flag.String("path", "/", "path to advertise in the banner")
+	var nogate stringList
+	flag.Var(&nogate, "nogate-path", "path prefix served without auth, GET/HEAD only; repeatable")
 	flag.Parse()
 
 	for name, v := range map[string]string{"listen": *listen, "target": *target, "public-host": *publicHost} {
@@ -98,6 +107,7 @@ func main() {
 	g := &gate{
 		password: makePassword(),
 		token:    randomString(24),
+		nogate:   nogate,
 		sessions: map[string]time.Time{},
 		limiter:  limiter{last: map[string]time.Time{}},
 	}
@@ -112,16 +122,20 @@ func main() {
 	}
 
 	base := "https://" + *publicHost + *path
+	nogateLine := ""
+	if len(g.nogate) > 0 {
+		nogateLine = fmt.Sprintf("  no-auth     %s   (GET/HEAD, served without a secret)\n", strings.Join(g.nogate, ", "))
+	}
 	fmt.Printf(`
 share-public: %s  ->  %s
               tailnet %s, open to %s only
 
   magic link  %s
   password    %s   (login screen on any path)
-
+%s
 Paste any localhost URL here for its public form. Ctrl-C to close.
 
-`, base, *target, *listen, *bastion, magicURL(base, g.token), g.password)
+`, base, *target, *listen, *bastion, magicURL(base, g.token), g.password, nogateLine)
 
 	// A share is usually driven from the browser it is serving, so the URL you
 	// want to hand out is one you only have half an hour in. Reading stdin lets
@@ -139,9 +153,16 @@ Paste any localhost URL here for its public form. Ctrl-C to close.
 	}
 }
 
+// stringList collects a repeatable string flag in call order.
+type stringList []string
+
+func (s *stringList) String() string     { return strings.Join(*s, ",") }
+func (s *stringList) Set(v string) error { *s = append(*s, v); return nil }
+
 type gate struct {
 	password string
 	token    string
+	nogate   []string
 	proxy    *httputil.ReverseProxy
 
 	mu       sync.Mutex
@@ -158,6 +179,17 @@ func (g *gate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		g.handleLogin(w, r)
 		return
+	}
+
+	// Declared prefixes are served straight through, no auth. Restricted to
+	// GET/HEAD so an -nogate-path can never open an unauthenticated write onto
+	// the local app — only reads of intentionally-public metadata like
+	// /.well-known/*, which a third party fetches carrying no per-run secret.
+	if r.Method == http.MethodGet || r.Method == http.MethodHead {
+		if g.nogated(r.URL.Path) {
+			g.proxy.ServeHTTP(w, r)
+			return
+		}
 	}
 
 	if g.authed(r) {
@@ -228,6 +260,22 @@ func (g *gate) rejectRateLimited(w http.ResponseWriter, r *http.Request, ip, kin
 	log.Printf("rate limited %s attempt from %s", kind, ip)
 	w.Header().Set("Retry-After", fmt.Sprintf("%d", int(failCooldown.Seconds())))
 	g.renderLogin(w, r, currentPath(r), "Too many attempts. Wait 5 seconds.", http.StatusTooManyRequests)
+}
+
+// nogated reports whether path falls under a declared no-auth prefix. Matching
+// is on path segments, so -nogate-path /.well-known covers /.well-known and
+// /.well-known/oidc.json but never /.well-known-evil.
+func (g *gate) nogated(path string) bool {
+	for _, p := range g.nogate {
+		if !strings.HasPrefix(path, p) {
+			continue
+		}
+		rest := path[len(p):]
+		if rest == "" || strings.HasSuffix(p, "/") || strings.HasPrefix(rest, "/") {
+			return true
+		}
+	}
+	return false
 }
 
 func (g *gate) authed(r *http.Request) bool {

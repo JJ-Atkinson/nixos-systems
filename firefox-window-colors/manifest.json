@@ -1,0 +1,19 @@
+{
+  "manifest_version": 2,
+  "name": "Window Colors",
+  "version": "1.0.0",
+  "description": "Assign a distinct chrome color to each Firefox window",
+  "permissions": ["theme"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "window-colors@local",
+      "strict_min_version": "60.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  }
+}

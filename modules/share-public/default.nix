@@ -143,11 +143,32 @@ let
         cat >&"$out" <<'EOF'
       share-public — expose a local port through the public bastion, in foreground.
 
-        sudo share-public <dev1|dev2> <local-port|localhost-url>
+        sudo share-public [options] <dev1|dev2> <local-port|localhost-url>
 
       Serves a local server at https://<slot>.pathul-dapneb.com for as long as
       this command runs. Ctrl-C, SIGTERM, SIGHUP (closing the terminal) or a
       normal exit all shut the firewall and drop the listener.
+
+      Options:
+        --allow-path-nogate <prefix>
+            Serve everything under <prefix> WITHOUT authentication — no magic
+            link, no password, no cookie, no redirect. GET/HEAD only, so it can
+            never open an unauthenticated write onto the local app. Repeatable.
+
+            For endpoints a third party must fetch while holding none of this
+            run's secrets: OIDC/OAuth discovery and JWKS, .well-known probes,
+            webhook verification callbacks. A relying party fetching
+            /.well-known/oidc.json carries no per-run token, so the normal
+            magic-link path (302 + cookie) bounces it to the login screen; this
+            hands it the JSON straight, 200.
+
+            Matching is by path segment: --allow-path-nogate /.well-known
+            covers /.well-known and /.well-known/oidc.json but never
+            /.well-known-evil. Everything OUTSIDE the listed prefixes still needs
+            a secret as before. Only expose paths whose bodies are meant to be
+            public — anyone who can reach the bastion can read them.
+
+            e.g.  sudo share-public --allow-path-nogate /.well-known dev1 5173
 
       Given a localhost URL instead of a bare port, the path is carried over and
       the public URL is printed back rewritten:
@@ -182,9 +203,38 @@ let
         exit "$code"
       }
 
-      case "''${1:-}" in
-        -h|--help|help) usage 0 ;;
-      esac
+      # Options may precede or follow the two positionals. Each
+      # --allow-path-nogate becomes a -nogate-path passed through to the gate;
+      # the flag is repeatable, so the args accumulate in an array.
+      nogate_args=()
+      positional=()
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          -h|--help|help) usage 0 ;;
+          --allow-path-nogate)
+            [ "$#" -ge 2 ] || { echo "share-public: --allow-path-nogate needs a path" >&2; usage; }
+            case "$2" in
+              /*) ;;
+              *) echo "share-public: --allow-path-nogate wants an absolute path, got '$2'" >&2; usage ;;
+            esac
+            nogate_args+=(-nogate-path "$2")
+            shift 2
+            ;;
+          --allow-path-nogate=*)
+            val="''${1#*=}"
+            case "$val" in
+              /*) ;;
+              *) echo "share-public: --allow-path-nogate wants an absolute path, got '$val'" >&2; usage ;;
+            esac
+            nogate_args+=(-nogate-path "$val")
+            shift
+            ;;
+          --) shift; while [ "$#" -gt 0 ]; do positional+=("$1"); shift; done ;;
+          -*) echo "share-public: unknown option '$1'" >&2; usage ;;
+          *) positional+=("$1"); shift ;;
+        esac
+      done
+      set -- "''${positional[@]+"''${positional[@]}"}"
 
       [ "$#" -eq 2 ] || usage 64
 
@@ -312,6 +362,7 @@ let
         -public-host "$public_host" \
         -path "$path" \
         -bastion ${bastionIp} \
+        ''${nogate_args[@]+"''${nogate_args[@]}"} \
         -listen ${tailnetIp}:"$public_port" <&3 &
       gate_pid=$!
 

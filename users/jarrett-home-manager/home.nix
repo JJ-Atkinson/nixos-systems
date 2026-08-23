@@ -39,7 +39,7 @@ in {
     nixpkgsUnstable.gajim
     nixpkgsUnstable.movim
     nixpkgsUnstable.caligula
-    signal-desktop
+    nixpkgsUnstable.signal-desktop
     nixpkgsUnstable.zoom-us
     syncthing
     gnupg
@@ -72,6 +72,7 @@ in {
     tldr # faster man access
     # dbeaver-bin
     nixpkgsUnstable.proton-pass
+    nixpkgsUnstable.protonvpn-gui
     nixpkgsUnstable.imagemagick
     transmission_4-gtk
     claudeCode

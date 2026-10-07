@@ -13,7 +13,6 @@
     # VU Server service
     vu-server = {
       description = "VU Server - Python serial communication server for VU1 dials";
-      after = [ "default.target" ];
       wantedBy = [ "default.target" ];
 
       serviceConfig = {

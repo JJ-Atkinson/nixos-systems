@@ -5,7 +5,8 @@
     sbctl
   ];
 
-  boot.loader.systemd-boot.enable = lib.mkForce false;
+  # Disable systemd-boot when using Lanzaboote
+  boot.loader.systemd-boot.enable = false;
 
   boot.lanzaboote = {
     enable = true;

@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, utils, ... }:
 
 let
   cfg = config.services.btrfsScrubNotifier;
@@ -133,37 +133,20 @@ in
   config = {
     services.btrfs.autoScrub = {
       enable = true;
-      interval = "weekly";
-      fileSystems = [
-        "/"  # Main system btrfs (all subvolumes)
-        "/vm-storage/images"  # VM storage btrfs (checks integrity of qcow2 files)
-      ];
+      interval = lib.mkDefault "weekly";
+      # NixOS discovers Btrfs mounts and deduplicates subvolumes by device.
     };
 
-    # Stagger the vm-storage scrub so the two filesystems are not scrubbed
-    # concurrently. Concurrent scrub on Mon 00:00 correlated with a hard freeze
-    # on 2026-05-18 (vm-storage on a WD_BLACK SN7100 with btrfs corruption_errs).
-    systemd.timers."btrfs-scrub-vm\\x2dstorage-images" = {
-      timerConfig.OnCalendar = lib.mkForce "Mon *-*-* 03:00:00";
-    };
-
-    # Root drive (nvme0n1, WD_BLACK SN7100) is showing media errors and is
-    # pending RMA replacement. Scrub daily until replaced to surface new
-    # uncorrectable errors quickly.
-    systemd.timers."btrfs-scrub--" = {
-      timerConfig.OnCalendar = lib.mkForce "*-*-* 00:00:00";
-    };
-
-    systemd.services."btrfs-scrub--" = {
-      serviceConfig.ExecStopPost = [
-        "${checkScript} / btrfs-scrub--.service"
-      ];
-    };
-
-    systemd.services."btrfs-scrub-vm\\x2dstorage-images" = {
-      serviceConfig.ExecStopPost = [
-        "${checkScript} /vm-storage/images btrfs-scrub-vm\\x2dstorage-images.service"
-      ];
-    };
+    systemd.services = lib.mkIf config.services.btrfs.autoScrub.enable (
+      lib.listToAttrs (map (mountpoint:
+        let
+          unit = "btrfs-scrub-${utils.escapeSystemdPath mountpoint}";
+        in lib.nameValuePair unit {
+          serviceConfig.ExecStopPost = [
+            (utils.escapeSystemdExecArgs [ checkScript mountpoint "${unit}.service" ])
+          ];
+        }
+      ) config.services.btrfs.autoScrub.fileSystems)
+    );
   };
 }

@@ -1,4 +1,4 @@
-{nixpkgs, lib, ...} : {
+{config, nixpkgs, lib, ...} : {
   # Enable the X11 windowing system.
   services.xserver.enable = true;
 
@@ -55,14 +55,18 @@
     pulse.enable = true;
   };
 
-  # yubikey stuff
+  # yubikey and fingerprint auth
   security.polkit.enable = true;
   security.pam.services = {
     login.u2fAuth = true;
+    # login.fprintAuth handled by GDM via gdm-fingerprint service
     sudo.u2fAuth = true;
+    sudo.fprintAuth = config.services.fprintd.enable;
     polkit-1.u2fAuth = true;
+    polkit-1.fprintAuth = config.services.fprintd.enable;
   };
 
+  # services.yubikey-agent.enable = true;  # Disabled - using gpg-agent for SSH instead
   services.pcscd.enable = true;
   hardware.gpgSmartcards.enable = true;
   

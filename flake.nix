@@ -102,7 +102,7 @@
           # ./modules/desktop-kde.nix
           ./modules/docker.nix
           ./modules/etc.nix
-          ./modules/vu-driver.nix
+          # ./modules/vu-driver.nix  # disabled — VU1 dials not connected
           ./modules/networking.nix
           ./modules/ssh-access.nix
           ./modules/tailscale.nix
@@ -124,7 +124,7 @@
 
           # One small module to set the NixOS option for unfree
           (
-            { ... }:
+            { lib, ... }:
             {
               nixpkgs.config.allowUnfree = true;
               services.nixosAutoUpgradeRebootNotifier = {
@@ -134,6 +134,13 @@
                 notifyUsers = [ "jarrett" ];
               };
               services.btrfsScrubNotifier.notifyUsers = [ "jarrett" ];
+              services.btrfs.autoScrub.fileSystems = [ "/" "/vm-storage/images" ];
+              # Scrub the desktop's failing root drive daily pending replacement.
+              systemd.timers."btrfs-scrub--".timerConfig.OnCalendar =
+                lib.mkForce "*-*-* 00:00:00";
+              # Stagger VM storage: concurrent scrubs correlated with a hard freeze.
+              systemd.timers."btrfs-scrub-vm\\x2dstorage-images".timerConfig.OnCalendar =
+                lib.mkForce "Mon *-*-* 03:00:00";
               services.smartErrorWatch = {
                 enable = true;
                 notifyUsers = [ "jarrett" ];
@@ -173,7 +180,7 @@
           ./modules/virtual-machines.nix
           ./modules/docker.nix
           ./modules/etc.nix
-          ./modules/vu-driver.nix
+          # ./modules/vu-driver.nix  # disabled — VU1 dials not connected to this laptop
           ./modules/networking.nix
           ./modules/ssh-access.nix
           ./modules/tailscale.nix

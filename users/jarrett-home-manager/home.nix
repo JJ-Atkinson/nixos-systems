@@ -330,7 +330,18 @@ in {
           exec = "nautilus";
         }
       ]
-  ) // { uxplayrc.text = "p 17000\n"; };
+  ) // {
+    uxplayrc.text = "p 17000\n";
+    "herdr/config.toml" = {
+      force = true;
+      text = ''
+        onboarding = false
+
+        [theme]
+        name = "terminal"
+      '';
+    };
+  };
 
   xdg.desktopEntries = {
     sys-hibernate = {

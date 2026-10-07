@@ -46,6 +46,7 @@ in {
     yubikey-manager
     par2cmdline-turbo
     obs-studio
+    uxplay
     direnv
     magic-wormhole
     htop
@@ -57,6 +58,8 @@ in {
     nil
     nixfmt-rfc-style
     nixpkgsUnstable.ollama
+    nixpkgsUnstable.llama-cpp-vulkan
+    nixpkgsUnstable.pi-coding-agent
     element-desktop
     github-desktop
     nixpkgsUnstable.rustup
@@ -80,6 +83,7 @@ in {
     opencodeWithLibstdcpp
 
     # gnome apps
+    gnome-tweaks
     nixpkgsUnstable.resources
     nixpkgsUnstable.gnome-graphs
     nixpkgsUnstable.tangram
@@ -325,7 +329,7 @@ in {
           exec = "nautilus";
         }
       ]
-  );
+  ) // { uxplayrc.text = "p 17000\n"; };
 
   xdg.desktopEntries = {
     sys-hibernate = {

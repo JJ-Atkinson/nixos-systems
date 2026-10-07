@@ -42,6 +42,10 @@
   # ~512 MiB of RAM dedicated to HMB is acceptable.
   boot.kernelParams = [ "nvme.max_host_mem_size_mb=512" ];
 
+  # Prefer dropping file cache over paging idle heaps. Default 60 let ~50G of
+  # cold JVM/browser anon sit on LUKS swap and thrash the NVMes when it woke up.
+  boot.kernel.sysctl."vm.swappiness" = 10;
+
   # Periodic fstrim is redundant here and actively harmful. btrfs has enabled
   # discard=async by default since kernel 6.2, so freed extents and released
   # chunks are trimmed continuously in the background; the weekly sweep just

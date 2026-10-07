@@ -77,6 +77,17 @@ _prompt_git_info() {
 }
 
 _prompt_nix_shell_info() {
+  local context="${PROMPT_CONTEXT:-$EJLIVEKIT_DEV_LABEL}"
+  if [[ -n "$context" ]]; then
+    if [[ "$context" == *:* ]]; then
+      printf '%%{%%F{250}%%}[%%{%%F{blue}%%}%s:%%{%%F{magenta}%%}%s%%{%%F{250}%%}]%%{%%f%%} ' \
+        "${context%%:*}" "${context#*:}"
+    else
+      printf '%%{%%F{250}%%}[%%{%%F{magenta}%%}%s%%{%%F{250}%%}]%%{%%f%%} ' "$context"
+    fi
+    return
+  fi
+
   local depth="${WITH_PROGRAM_NIX_SHELL_DEPTH:-0}"
 
   if (( depth == 0 )); then

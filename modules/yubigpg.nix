@@ -4,6 +4,7 @@ let
   package = import ./yubigpg/package.nix {
     inherit lib pkgs;
     inherit (cfg) probeTimeout;
+    agentConfigFile = if cfg.enable then config.environment.etc."gnupg/gpg-agent.conf".source else null;
   };
 in
 {
@@ -28,10 +29,15 @@ in
       enable = true;
       enableExtraSocket = true;
       enableSSHSupport = true;
+      # The watchdog probes the canonical S.gpg-agent, not the pathname of
+      # the inherited std descriptor. That path intentionally selects another
+      # agent in fwd mode, so systemd must supervise this local agent instead.
+      # NixOS's key/value renderer emits booleans as literal arguments. An
+      # empty string renders a bare flag (with harmless trailing whitespace).
+      settings.disable-check-own-socket = "";
     };
 
-    # The local agent receives a stable std descriptor with its actual local
-    # pathname. Its own-socket watchdog therefore never follows the selector.
+    # Keep the local agent on its own stable std descriptor.
     systemd.user.sockets.gpg-agent = {
       socketConfig.ListenStream = lib.mkForce "%t/gnupg/S.gpg-agent.local";
       requires = [ "yubigpg-router.service" ];
@@ -40,7 +46,19 @@ in
     systemd.user.services.gpg-agent = {
       requires = [ "gpg-agent.socket" ];
       after = [ "gpg-agent.socket" ];
+      # Reload the LOCAL agent, never the agent selected by the canonical route.
+      serviceConfig.ExecReload = lib.mkForce (
+        "${pkgs.gnupg}/bin/gpg-connect-agent --no-autostart "
+        + "--raw-socket %t/gnupg/S.gpg-agent.local RELOADAGENT /bye"
+      );
     };
+
+    # Replace the GnuPG module's tty-update hook. Its default command follows
+    # the selected canonical socket and AUTOSTARTS an unsupervised agent when
+    # a forward is down. gpg.conf does not apply to gpg-connect-agent.
+    # This repository has no other system-wide programs.ssh.extraConfig blocks;
+    # user ~/.ssh/config host entries are independent of this setting.
+    programs.ssh.extraConfig = lib.mkForce cfg.package.sshConfig;
     systemd.user.services.yubigpg-router = {
       description = "Restore the manually selected GnuPG socket route";
       wantedBy = [ "sockets.target" ];

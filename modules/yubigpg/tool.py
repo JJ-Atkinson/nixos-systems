@@ -186,10 +186,13 @@ class Tool:
         paths = self.paths()
         mode = self.mode()
         target = os.readlink(paths["standard"]) if paths["standard"].is_symlink() else None
-        data = {"mode": mode, "agent": self.probe(paths[mode]), "gpgHome": str(self.gpg_home),
+        route_matches = target == paths[mode].name
+        selected_agent = self.probe(paths[mode])
+        data = {"mode": mode, "agent": selected_agent if route_matches else "misrouted",
+                "selectedEndpointAgent": selected_agent, "gpgHome": str(self.gpg_home),
                 "standardSocket": str(paths["standard"]), "selectedSocket": str(paths[mode]),
                 "localSocket": str(paths["local"]), "forwardedSocket": str(paths["fwd"]),
-                "routeMatchesMode": target == paths[mode].name, "keyAvailability": "not checked"}
+                "routeMatchesMode": route_matches, "keyAvailability": "not checked"}
         if as_json:
             print(json.dumps(data))
         else:
@@ -198,6 +201,9 @@ class Tool:
                   f"Forward to: {data['forwardedSocket']}\n"
                   f"Route:      {'configured' if data['routeMatchesMode'] else 'not initialized / mismatched'}\n"
                   "Key/card:   not checked (reachability does not prove key availability)")
+            if not route_matches:
+                print(f"WARNING: ordinary GPG is not routed to the selected endpoint "
+                      f"(that endpoint is {selected_agent}). Repair the standard socket route first.")
 
 
 def main():

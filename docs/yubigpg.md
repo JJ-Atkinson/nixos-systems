@@ -35,10 +35,23 @@ oneshot restores the symlink at user-manager startup. Switching requires no
 rebuild, environment update, or agent restart. Existing in-flight connections
 finish using their previous endpoint.
 
+The local agent's `disable-check-own-socket` setting is required: GnuPG's
+periodic watchdog checks the **canonical** socket even when systemd passes a
+different listening pathname. Without this setting it exits about a minute
+after selecting a different agent. Systemd manages the local agent's lifetime.
+
 `fwd` never automatically falls back. The module configures GPG/GPGSM clients
 with `no-autostart` so a disconnected tunnel does not cause them to spawn an
 agent over the selector. Local systemd socket activation still works. Do not
 override that setting with `--autostart` or a custom client configuration.
+
+The module also replaces NixOS's GnuPG SSH tty-update `Match exec` hook with a
+`gpg-connect-agent --no-autostart --raw-socket .../S.gpg-agent.local` command.
+The original hook can spawn an unsupervised agent over the selector during an
+outgoing SSH/Git operation when forwarding is unavailable. Client `gpg.conf`
+does not apply to that helper. Agent reloads likewise address `.local`
+explicitly. This replacement owns the system-wide `programs.ssh.extraConfig`
+setting; your own `~/.ssh/config` entries remain the standard client interface.
 
 ## Standard SSH configuration: `nixos` provides the key to Framework
 
@@ -213,6 +226,13 @@ attached or that a particular key is available.
   `remoteforward`. Choose `local` explicitly if the key is now here.
 - **Route not initialized:** inspect `systemctl --user status yubigpg-router`;
   `yubigpg init` restores the route once the module owns the local socket.
+- **Route replaced / pinentry appears on the receiver in fwd mode:** check
+  `pgrep -a -u "$UID" gpg-agent`. An unsupervised `--daemon` process may have
+  replaced the canonical symlink. Version 0.2.1 disables the local watchdog and
+  fixes the SSH tty-update hook that could autostart such a process. Apply it
+  on both hosts, stop only the identified stray agent after closing any active
+  GPG operation, restore the route, and restart the local GPG units. Do not
+  kill the SSH transport or log out of the desktop to repair this.
 - **Extra socket absent on provider:** check `gpg-agent-extra.socket` there.
 - **No secret key:** ensure the receiver's normal public keyring has the key
   and that the provider has the matching YubiKey attached.
@@ -229,7 +249,10 @@ The package build runs tests with isolated homes and disposable software keys.
 They emulate systemd's named socket descriptors with real supervised GPG
 agents, switch the standard symlink, invoke **unmodified GPG and Git**, verify
 forwarded signing/decryption and return to local signing, and check disconnected
-forwarding does not steal the route or fall back. They also test persistence,
+forwarding does not steal the route or fall back. A 75-second regression crosses
+the watchdog interval while the canonical forward is disconnected, then signs
+locally again. The build also executes the actual generated SSH `Match exec`
+hook against the local socket. Tests cover persistence, misrouting diagnostics,
 path preservation, and ordinary OpenSSH parsing of both forwarding mechanisms.
 The restricted-socket transport test uses a Unix relay; hardware PIN/touch and
 the real two-machine SSH workflow need the acceptance check above.

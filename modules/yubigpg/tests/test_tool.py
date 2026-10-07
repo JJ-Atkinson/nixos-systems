@@ -109,6 +109,16 @@ class SelectorTests(unittest.TestCase):
         self.use("local")
         self.assertEqual(self.tool.mode(), "local")
 
+    def test_status_never_claims_gpg_is_ready_when_route_is_replaced(self):
+        path = self.tool.paths()["standard"]
+        path.unlink()
+        path.write_text("some other owner")
+        result = subprocess.run([sys.executable, str(SCRIPT), "status", "--json"], capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertFalse(data["routeMatchesMode"])
+        self.assertEqual(data["agent"], "misrouted")
+
     def test_probe_timeout_for_nonresponsive_forward(self):
         path = self.tool.paths()["fwd"]
         with socket.socket(socket.AF_UNIX) as listener:
@@ -119,6 +129,27 @@ class SelectorTests(unittest.TestCase):
             started = time.monotonic()
             self.assertEqual(self.tool.probe(path), "timed out")
             self.assertLess(time.monotonic() - started, 1)
+
+    def test_old_tty_helper_can_spawn_despite_gpg_client_no_autostart(self):
+        # Reproduce the actual takeover: gpg-connect-agent does NOT read
+        # gpg.conf, so client no-autostart cannot protect an unsafe SSH hook.
+        (self.tool.gpg_home / "gpg.conf").write_text("no-autostart\n")
+        self.use("fwd")
+        paths = self.tool.paths()
+        try:
+            result = subprocess.run(
+                ["gpg-connect-agent", "--homedir", str(self.tool.gpg_home), "--quiet", "updatestartuptty", "/bye"],
+                capture_output=True, timeout=10,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(paths["standard"].is_symlink())
+            self.assertTrue(paths["standard"].is_socket())
+        finally:
+            # This raw path belongs only to this disposable test home.
+            subprocess.run(
+                ["gpg-connect-agent", "--no-autostart", "--raw-socket", str(paths["standard"]), "KILLAGENT", "/bye"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5,
+            )
 
     def test_plain_ssh_config_parses_gpg_and_ssh_forwarding(self):
         config = self.home / "ssh_config"
@@ -141,6 +172,14 @@ class SelectorTests(unittest.TestCase):
         self.assertIn("forwardagent yes\n", result.stdout)
         self.assertIn("exitonforwardfailure yes\n", result.stdout)
         self.assertIn("controlmaster auto\n", result.stdout)
+
+    def test_generated_agent_configuration_is_accepted(self):
+        if os.environ.get("YUBIGPG_TEST_AGENT_CONFIG"):
+            result = subprocess.run(
+                ["gpg-agent", "--options", os.environ["YUBIGPG_TEST_AGENT_CONFIG"],
+                 "--homedir", str(self.tool.gpg_home), "--gpgconf-test"], capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def start_agent(self, home, standard, extra):
         home.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -247,8 +286,8 @@ class SelectorTests(unittest.TestCase):
                 self.assertEqual(committed.returncode, 0, committed.stderr)
                 verified = subprocess.run(git + ["verify-commit", "HEAD"], capture_output=True, env=environment)
                 self.assertEqual(verified.returncode, 0, verified.stderr)
-                # Local agent survives switching because its std descriptor uses
-                # S.gpg-agent.local, not the selector's canonical pathname.
+                # The local socket is separate, and the canonical-path watchdog
+                # is disabled exactly as it is in the NixOS module.
                 self.assertIsNone(self.agents[0][0].poll())
             finally:
                 server.shutdown()
@@ -258,6 +297,37 @@ class SelectorTests(unittest.TestCase):
         self.assertNotEqual(disconnected.returncode, 0)
         self.assertEqual(os.readlink(paths["standard"]), "S.gpg-agent.fwd")
         self.assertEqual(self.tool.mode(), "fwd")
+        # Exercise the actual SSH tty-update operation with a disconnected
+        # canonical endpoint. It must use .local without autostarting a daemon.
+        updated = subprocess.run(
+            ["gpg-connect-agent", "--quiet", "--no-autostart", "--raw-socket", str(paths["local"]),
+             "updatestartuptty", "/bye"], capture_output=True,
+        )
+        self.assertEqual(updated.returncode, 0, updated.stderr)
+        self.assertEqual(os.readlink(paths["standard"]), "S.gpg-agent.fwd")
+        if os.environ.get("YUBIGPG_TEST_SSH_CONFIG"):
+            # Parse and execute the exact system-wide Match exec hook generated
+            # by the package/module, rather than merely testing a hand-picked CLI.
+            runtime = self.home / "runtime"
+            runtime.mkdir()
+            (runtime / "gnupg").symlink_to(self.tool.gpg_home)
+            probe_config = self.home / "hook-ssh-config"
+            probe_config.write_text(Path(os.environ["YUBIGPG_TEST_SSH_CONFIG"]).read_text().replace(
+                "Match all", "    ServerAliveInterval 17\nMatch all", 1,
+            ))
+            parsed = subprocess.run(
+                ["ssh", "-G", "-F", str(probe_config), "example.invalid"],
+                env={**os.environ, "XDG_RUNTIME_DIR": str(runtime)}, capture_output=True,
+            )
+            self.assertEqual(parsed.returncode, 0, parsed.stderr)
+            self.assertIn(b"serveraliveinterval 17\n", parsed.stdout)
+            self.assertEqual(os.readlink(paths["standard"]), "S.gpg-agent.fwd")
+        # Previously the supervised agent died ~64 seconds after a switch.
+        # Test past a full watchdog interval, not just immediately after routing.
+        time.sleep(75)
+        self.assertIsNone(self.agents[0][0].poll(), (self.tool.gpg_home / "test-agent.log").read_text())
+        self.assertEqual(self.tool.probe(paths["local"]), "reachable")
+        self.assertEqual(os.readlink(paths["standard"]), "S.gpg-agent.fwd")
         self.use("local")
         sign(local_key)
 

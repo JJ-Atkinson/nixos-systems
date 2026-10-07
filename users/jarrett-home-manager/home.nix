@@ -256,9 +256,8 @@ in {
   # '';
 
 
-  home.sessionVariables = {
-    SSH_AUTH_SOCK = "/run/user/1000/gnupg/S.gpg-agent.ssh";
-  };
+  # NixOS's GnuPG module supplies the local SSH agent when this is unset.
+  # Preserve SSH_AUTH_SOCK supplied by ssh -A instead of overwriting it here.
 
   # Re-enable gnome keyring, which is turned off in configuration.nix. The non-ssh
   # functionality is still required by some apps. See desktop.nix for where
@@ -269,7 +268,7 @@ in {
   };
 
   # Enable KWallet for KDE application secrets
-  # SSH remains handled by GPG agent (see SSH_AUTH_SOCK above)
+  # Local SSH uses GPG agent; SSH sessions can preserve a forwarded agent.
   # services.kwalletd = {
   #   enable = true;
   # };

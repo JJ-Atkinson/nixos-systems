@@ -99,6 +99,7 @@
           ./modules/disk-diagnostics.nix
           ./modules/smart-error-watch.nix
           ./modules/desktop.nix
+          ./modules/yubigpg.nix
           # ./modules/desktop-kde.nix
           ./modules/docker.nix
           ./modules/etc.nix
@@ -127,6 +128,9 @@
             { lib, ... }:
             {
               nixpkgs.config.allowUnfree = true;
+              programs.yubigpg = {
+                enable = true;
+              };
               services.nixosAutoUpgradeRebootNotifier = {
                 enable = true;
                 flake = "/etc/nixos#nixos";
@@ -177,6 +181,7 @@
           ./modules/btrfs-scrub.nix
           ./modules/disk-diagnostics.nix
           ./modules/desktop.nix
+          ./modules/yubigpg.nix
           ./modules/virtual-machines.nix
           ./modules/docker.nix
           ./modules/etc.nix
@@ -195,6 +200,9 @@
             { ... }:
             {
               nixpkgs.config.allowUnfree = true;
+              programs.yubigpg = {
+                enable = true;
+              };
               services.nixosAutoUpgradeRebootNotifier = {
                 enable = true;
                 flake = "/etc/nixos#nixos-framework";

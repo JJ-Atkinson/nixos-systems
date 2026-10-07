@@ -3,7 +3,7 @@
 # Also see https://github.com/Mic92/dotfiles/blob/master/nixos/.sops.yaml
 # for a more complex example.
 keys:
-  - &admin_jarrett AD32FE57D2833DBF457C9AB1979C631C96E72E85
+  - &admin_jarrett 129C4A67BB9B6E293E29D2F7E7A699A45DC0DD8A
   - &host_nixos age1e0td9nmh795pl2ptlpyhqsas9de406pgs4hglrje5kc070dt9c3q70u2wu
   - &host_nixos_framework age1placeholder_replace_with_actual_key_later
 creation_rules:

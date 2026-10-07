@@ -81,6 +81,7 @@ in {
     claudeCode
     nixpkgsUnstable.appimage-run
     opencodeWithLibstdcpp
+    nixpkgsUnstable.herdr
 
     # gnome apps
     gnome-tweaks

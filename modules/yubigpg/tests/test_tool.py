@@ -61,14 +61,17 @@ class SelectorTests(unittest.TestCase):
         paths = self.tool.paths()
         self.assertEqual(self.tool.mode(), "local")
         self.assertEqual(os.readlink(paths["standard"]), paths["local"].name)
+        self.assertEqual(os.readlink(paths["ssh_standard"]), paths["ssh_local"].name)
         self.use("fwd")
         self.assertEqual(os.readlink(paths["standard"]), paths["fwd"].name)
+        self.assertEqual(os.readlink(paths["ssh_standard"]), paths["ssh_fwd"].name)
         self.assertEqual(Tool().mode(), "fwd")
         self.assertEqual((self.tool.state / "mode").stat().st_mode & 0o777, 0o600)
         self.tool.init()
         self.assertEqual(os.readlink(paths["standard"]), paths["fwd"].name)
         self.use("local")
         self.assertEqual(os.readlink(paths["standard"]), paths["local"].name)
+        self.assertEqual(os.readlink(paths["ssh_standard"]), paths["ssh_local"].name)
 
     def test_status_reports_unavailable_without_creating_an_agent(self):
         self.use("fwd")
@@ -80,6 +83,8 @@ class SelectorTests(unittest.TestCase):
         self.assertTrue(data["routeMatchesMode"])
         self.assertFalse(Path(data["forwardedSocket"]).exists())
         self.assertEqual(data["gpgHome"], str(self.tool.gpg_home))
+        self.assertEqual(data["ssh"]["agent"], "unavailable")
+        self.assertTrue(data["ssh"]["routeMatchesMode"])
 
     def test_init_preserves_unrelated_paths_and_active_old_sockets(self):
         path = self.tool.paths()["standard"]
@@ -154,11 +159,13 @@ class SelectorTests(unittest.TestCase):
     def test_plain_ssh_config_parses_gpg_and_ssh_forwarding(self):
         config = self.home / "ssh_config"
         receiver = self.tool.paths()["fwd"]
+        ssh_receiver = self.tool.paths()["ssh_fwd"]
         source = "/run/user/1000/gnupg/S.gpg-agent.extra"
         config.write_text(f"""Host framework
     HostName 127.0.0.1
     User jarrett
     RemoteForward {receiver} {source}
+    RemoteForward {ssh_receiver} /run/user/1000/gnupg/S.gpg-agent.ssh
     ForwardAgent yes
     IdentityAgent /run/user/1000/gnupg/S.gpg-agent.ssh
     ExitOnForwardFailure yes
@@ -169,6 +176,7 @@ class SelectorTests(unittest.TestCase):
         result = subprocess.run(["ssh", "-G", "-F", str(config), "framework"],
                                 check=True, capture_output=True, text=True)
         self.assertIn(f"remoteforward {receiver} {source}\n", result.stdout)
+        self.assertIn(f"remoteforward {ssh_receiver} /run/user/1000/gnupg/S.gpg-agent.ssh\n", result.stdout)
         self.assertIn("forwardagent yes\n", result.stdout)
         self.assertIn("exitonforwardfailure yes\n", result.stdout)
         self.assertIn("controlmaster auto\n", result.stdout)
@@ -212,6 +220,104 @@ class SelectorTests(unittest.TestCase):
              "--quick-add-key", fingerprint, "cv25519", "encr", "0"], check=True, capture_output=True,
         )
         return fingerprint
+
+    def test_ssh_agent_signing_follows_the_same_selection(self):
+        paths = self.tool.paths()
+        self.start_agent(self.tool.gpg_home, paths["local"], paths["local"].with_name("S.gpg-agent.extra"))
+        local_key = self.generate_key(self.tool.gpg_home, "local-ssh")
+        provider = self.home / "ssh-provider"
+        provider.mkdir(mode=0o700)
+        self.agent_homes.append(provider)
+        provider_socket = Path(subprocess.run(
+            [self.tool.gpgconf, "--homedir", str(provider), "--list-dirs", "agent-socket"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip())
+        self.start_agent(provider, provider_socket, provider_socket.with_name("S.gpg-agent.extra"))
+        remote_key = self.generate_key(provider, "remote-ssh")
+
+        def authorize(home, fingerprint):
+            subprocess.run(
+                ["gpg", "--homedir", str(home), "--batch", "--pinentry-mode", "loopback", "--passphrase", "",
+                 "--quick-add-key", fingerprint, "ed25519", "auth", "0"], check=True, capture_output=True,
+            )
+            listing = subprocess.run(
+                ["gpg", "--homedir", str(home), "--with-colons", "--with-keygrip", "--list-keys"],
+                check=True, capture_output=True, text=True,
+            ).stdout
+            authentication = False
+            for line in listing.splitlines():
+                fields = line.split(":")
+                if fields[0] in ("pub", "sub"):
+                    authentication = "a" in fields[11]
+                elif fields[0] == "grp" and authentication:
+                    (home / "sshcontrol").write_text(fields[9] + "\n")
+                    break
+            public = subprocess.run(
+                ["gpg", "--homedir", str(home), "--export-ssh-key", fingerprint],
+                check=True, capture_output=True,
+            ).stdout
+            return public
+
+        local_public = authorize(self.tool.gpg_home, local_key)
+        remote_public = authorize(provider, remote_key)
+
+        class Proxy(socketserver.BaseRequestHandler):
+            def handle(handler):
+                with socket.socket(socket.AF_UNIX) as upstream:
+                    upstream.connect(str(provider_socket.with_name("S.gpg-agent.ssh")))
+                    peers = [handler.request, upstream]
+                    while True:
+                        readable, _, _ = select.select(peers, [], [], 5)
+                        if not readable:
+                            return
+                        for source in readable:
+                            data = source.recv(65536)
+                            if not data:
+                                return
+                            (upstream if source is handler.request else handler.request).sendall(data)
+
+        class Server(socketserver.ThreadingUnixStreamServer):
+            daemon_threads = True
+
+        environment = {**os.environ, "SSH_AUTH_SOCK": str(paths["ssh_standard"])}
+        message = b"SSH signing follows the same receiver-side selector\n"
+
+        def sign(public):
+            identities = subprocess.run(["ssh-add", "-L"], env=environment, check=True, capture_output=True)
+            self.assertIn(b" ".join(public.split()[:2]), identities.stdout)
+            public_file = self.home / "ssh-key.pub"
+            public_file.write_bytes(public)
+            signed = subprocess.run(
+                ["ssh-keygen", "-Y", "sign", "-f", str(public_file), "-n", "yubigpg-test"],
+                input=message, env=environment, capture_output=True,
+            )
+            self.assertEqual(signed.returncode, 0, signed.stderr)
+            signature = self.home / "ssh-signature"
+            signature.write_bytes(signed.stdout)
+            allowed = self.home / "allowed-signers"
+            allowed.write_bytes(b"test " + b" ".join(public.split()[:2]) + b"\n")
+            verified = subprocess.run(
+                ["ssh-keygen", "-Y", "verify", "-f", str(allowed), "-I", "test", "-n", "yubigpg-test",
+                 "-s", str(signature)], input=message, capture_output=True,
+            )
+            self.assertEqual(verified.returncode, 0, verified.stderr)
+
+        sign(local_public)
+        with Server(str(paths["ssh_fwd"]), Proxy) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                self.use("fwd")
+                self.assertEqual(self.tool.probe_ssh(paths["ssh_standard"]), ("reachable", 1))
+                sign(remote_public)
+            finally:
+                server.shutdown()
+                thread.join()
+        unavailable = subprocess.run(["ssh-add", "-L"], env=environment, capture_output=True)
+        self.assertNotEqual(unavailable.returncode, 0)
+        self.assertEqual(os.readlink(paths["ssh_standard"]), paths["ssh_fwd"].name)
+        self.use("local")
+        sign(local_public)
 
     def test_ordinary_gpg_and_git_follow_socket_selection(self):
         paths = self.tool.paths()

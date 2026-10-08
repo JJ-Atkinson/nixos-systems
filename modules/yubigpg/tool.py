@@ -1,4 +1,4 @@
-"""Receiver-side selection of the socket used by ordinary GnuPG clients."""
+"""Receiver-side selection of local or forwarded GPG and SSH agent sockets."""
 
 import argparse
 import contextlib
@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import socket
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -73,7 +74,10 @@ class Tool:
         if not standard.is_absolute() or standard.name != "S.gpg-agent":
             raise Error("GnuPG returned an unexpected standard socket path.")
         return {"standard": standard, "local": standard.with_name("S.gpg-agent.local"),
-                "fwd": standard.with_name("S.gpg-agent.fwd")}
+                "fwd": standard.with_name("S.gpg-agent.fwd"),
+                "ssh_standard": standard.with_name("S.yubigpg-ssh-agent"),
+                "ssh_local": standard.with_name("S.gpg-agent.ssh"),
+                "ssh_fwd": standard.with_name("S.gpg-agent.ssh.fwd")}
 
     def probe(self, path):
         """Probe Assuan directly; never spawn an agent or perform key operations."""
@@ -116,7 +120,41 @@ class Tool:
         except OSError:
             return "unavailable"
 
-    def check_standard(self, path):
+    def probe_ssh(self, path):
+        """Request public identities only; never sign or invoke pinentry."""
+        try:
+            with socket.socket(socket.AF_UNIX) as connection:
+                deadline = time.monotonic() + self.timeout
+                connection.settimeout(self.timeout)
+                connection.connect(str(path))
+
+                def receive(length):
+                    data = b""
+                    while len(data) < length:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise TimeoutError
+                        connection.settimeout(remaining)
+                        chunk = connection.recv(length - len(data))
+                        if not chunk:
+                            raise OSError("SSH agent closed the connection")
+                        data += chunk
+                    return data
+
+                connection.sendall(struct.pack(">IB", 1, 11))  # REQUEST_IDENTITIES
+                length = struct.unpack(">I", receive(4))[0]
+                if length < 5 or length > 1024 * 1024:
+                    return "unavailable", None
+                reply = receive(length)
+                if reply[0] != 12:  # IDENTITIES_ANSWER
+                    return "unavailable", None
+                return "reachable", struct.unpack(">I", reply[1:5])[0]
+        except TimeoutError:
+            return "timed out", None
+        except OSError:
+            return "unavailable", None
+
+    def check_standard(self, path, allowed_targets=("S.gpg-agent.local", "S.gpg-agent.fwd")):
         """Never replace a live socket belonging to an old agent installation."""
         try:
             info = path.lstat()
@@ -124,7 +162,7 @@ class Tool:
             return
         if stat.S_ISLNK(info.st_mode):
             target = os.readlink(path)
-            if target not in ("S.gpg-agent.local", "S.gpg-agent.fwd"):
+            if target not in allowed_targets:
                 raise Error(f"Refusing to replace an unrelated symlink at {path}.")
             return
         if not stat.S_ISSOCK(info.st_mode):
@@ -139,26 +177,33 @@ class Tool:
                 return
             except OSError as exc:
                 raise Error(f"Cannot determine whether the old standard socket is active: {exc}") from exc
-        raise Error("The standard socket still belongs to a running old agent. "
-                    "Apply the socket-selector module and restart its GPG units before initializing it.")
+        raise Error(f"A live listener owns {path}, which should be the selector symlink. "
+                    "Inspect the GPG units and any unsupervised --daemon agent before repairing the route.")
 
     def route(self, mode, persist=True):
         paths = self.paths()
-        standard = paths["standard"]
-        self.check_standard(standard)
-        self.private_dir(standard.parent)
+        routes = [(paths["standard"], paths[mode]), (paths["ssh_standard"], paths["ssh_" + mode])]
+        # Validate both before altering either selection.
+        self.check_standard(paths["standard"])
+        self.check_standard(paths["ssh_standard"], (paths["ssh_local"].name, paths["ssh_fwd"].name))
+        for standard, target in routes:
+            self.private_dir(standard.parent)
+            self.replace_link(standard, target)
+        if persist:
+            self.atomic_write(self.state / "mode", mode + "\n")
+        return paths
+
+    @staticmethod
+    def replace_link(standard, target):
         fd, temporary = tempfile.mkstemp(prefix=".yubigpg-socket-", dir=standard.parent)
         os.close(fd)
         os.unlink(temporary)
         try:
-            os.symlink(paths[mode].name, temporary)
+            os.symlink(target.name, temporary)
             os.replace(temporary, standard)
         finally:
             if os.path.lexists(temporary):
                 os.unlink(temporary)
-        if persist:
-            self.atomic_write(self.state / "mode", mode + "\n")
-        return paths
 
     def init(self):
         with self.lock():
@@ -180,7 +225,7 @@ class Tool:
             if not paths["standard"].is_symlink():
                 raise Error("Socket selector is not initialized. Apply the module or run 'yubigpg init'.")
             self.route(mode)
-        print(f"Selected {mode}: {paths[mode]}" + (" (no fallback)" if mode == "fwd" else ""))
+        print(f"Selected {mode} for GPG and SSH" + (" (no fallback)" if mode == "fwd" else ""))
 
     def status(self, as_json=False):
         paths = self.paths()
@@ -188,18 +233,28 @@ class Tool:
         target = os.readlink(paths["standard"]) if paths["standard"].is_symlink() else None
         route_matches = target == paths[mode].name
         selected_agent = self.probe(paths[mode])
+        ssh_target = os.readlink(paths["ssh_standard"]) if paths["ssh_standard"].is_symlink() else None
+        ssh_matches = ssh_target == paths["ssh_" + mode].name
+        ssh_agent, identities = self.probe_ssh(paths["ssh_" + mode])
         data = {"mode": mode, "agent": selected_agent if route_matches else "misrouted",
                 "selectedEndpointAgent": selected_agent, "gpgHome": str(self.gpg_home),
                 "standardSocket": str(paths["standard"]), "selectedSocket": str(paths[mode]),
                 "localSocket": str(paths["local"]), "forwardedSocket": str(paths["fwd"]),
-                "routeMatchesMode": route_matches, "keyAvailability": "not checked"}
+                "routeMatchesMode": route_matches, "keyAvailability": "not checked",
+                "ssh": {"agent": ssh_agent if ssh_matches else "misrouted", "identities": identities,
+                        "selectedEndpointAgent": ssh_agent, "routeMatchesMode": ssh_matches,
+                        "socket": str(paths["ssh_standard"]), "selectedSocket": str(paths["ssh_" + mode]),
+                        "forwardedSocket": str(paths["ssh_fwd"])}}
         if as_json:
             print(json.dumps(data))
         else:
-            print(f"Mode:       {mode}\nAgent:      {data['agent']}\n"
+            print(f"Mode:       {mode}\nGPG agent:  {data['agent']}\n"
                   f"GPG socket: {data['standardSocket']}\nSelected:   {data['selectedSocket']}\n"
                   f"Forward to: {data['forwardedSocket']}\n"
-                  f"Route:      {'configured' if data['routeMatchesMode'] else 'not initialized / mismatched'}\n"
+                  f"GPG route:  {'configured' if route_matches else 'not initialized / mismatched'}\n"
+                  f"SSH agent:  {data['ssh']['agent']} ({identities if identities is not None else '?'} identities)\n"
+                  f"SSH socket: {data['ssh']['socket']}\nSSH fwd to: {data['ssh']['forwardedSocket']}\n"
+                  f"SSH route:  {'configured' if ssh_matches else 'not initialized / mismatched'}\n"
                   "Key/card:   not checked (reachability does not prove key availability)")
             if not route_matches:
                 print(f"WARNING: ordinary GPG is not routed to the selected endpoint "
@@ -209,7 +264,7 @@ class Tool:
 def main():
     parser = argparse.ArgumentParser(prog="yubigpg", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    use = commands.add_parser("use", help="Select local or SSH-forwarded GPG for all ordinary clients")
+    use = commands.add_parser("use", help="Select local or forwarded GPG and SSH agents")
     use.add_argument("mode", choices=["local", "fwd"])
     status = commands.add_parser("status", help="Show mode, socket routing, and agent reachability")
     status.add_argument("--json", action="store_true")

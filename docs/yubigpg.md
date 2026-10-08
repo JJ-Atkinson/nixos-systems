@@ -1,7 +1,7 @@
-# Receiver-side manual GPG socket selection
+# Receiver-side manual GPG and SSH-agent selection
 
-`yubigpg` runs on the machine doing GPG operations. It selects the socket used
-by **ordinary GPG clients**, including Git, without wrapping GPG or SSH:
+`yubigpg` runs on the machine doing GPG/SSH operations. It selects the sockets
+used by **ordinary GPG and OpenSSH clients**, including Git, without wrappers:
 
 ```console
 yubigpg use local
@@ -22,10 +22,13 @@ The NixOS module separates the real agent endpoints from GPG's standard socket:
 /run/user/1000/gnupg/S.gpg-agent.local   local systemd-managed GPG agent
 /run/user/1000/gnupg/S.gpg-agent.fwd     socket supplied by ordinary SSH RemoteForward
 /run/user/1000/gnupg/S.gpg-agent         symlink selected by yubigpg
+/run/user/1000/gnupg/S.gpg-agent.ssh     local GPG-backed SSH agent (unchanged)
+/run/user/1000/gnupg/S.gpg-agent.ssh.fwd fixed SSH-agent endpoint supplied by RemoteForward
+/run/user/1000/gnupg/S.yubigpg-ssh-agent SSH-agent symlink selected by yubigpg
 ```
 
-`use local` points the standard socket at `.local`; `use fwd` points it at `.fwd`.
-Each new GPG connection follows that route. There are no separate GPG sessions,
+`use local` selects both local agents; `use fwd` selects both forwarded agents.
+Each new agent connection follows the chosen route. There are no separate GPG sessions,
 alternate keyrings, executable aliases, client connection helpers, or required
 changes to an application's GPG executable.
 
@@ -62,6 +65,7 @@ Host nixos-framework
     HostName nixos-framework
     User jarrett
     RemoteForward /run/user/1000/gnupg/S.gpg-agent.fwd /run/user/1000/gnupg/S.gpg-agent.extra
+    RemoteForward /run/user/1000/gnupg/S.gpg-agent.ssh.fwd /run/user/1000/gnupg/S.gpg-agent.ssh
     ForwardAgent yes
     IdentityAgent /run/user/1000/gnupg/S.gpg-agent.ssh
     ExitOnForwardFailure yes
@@ -98,16 +102,29 @@ using this alias inherit the same forwarding configuration. Tools that disable
 forwarding, ignore the config, or use an independent SSH implementation must
 be configured through their own SSH settings.
 
-`RemoteForward` carries GPG operations back to the provider's restricted extra
-socket. `ForwardAgent` provides the provider's GPG-backed SSH identities for
-onward SSH from the remote session. `IdentityAgent` selects the provider's local
-SSH agent even if its shell inherited a different `SSH_AUTH_SOCK`.
+The first `RemoteForward` carries GPG operations to the provider's restricted
+extra socket. The second carries the SSH-agent protocol to its GPG SSH socket.
+**Both entries are required for `use fwd` to select both kinds of operation.**
+`IdentityAgent` in this provider host stanza deliberately uses the provider's
+real local agent for authentication to the receiver. `ForwardAgent yes` also
+provides ordinary session-scoped agent forwarding, but the selector uses the
+second fixed `RemoteForward`, not SSH's randomly named per-session agent socket.
 
-The receiving-side `use` command controls **GPG socket selection only**.
-SSH agent selection for the remote session follows `SSH_AUTH_SOCK`. The shared
-Home Manager configuration preserves that variable when SSH supplies it.
-Already-running receiver desktop applications keep their own SSH environment,
-but ordinary GPG applications use the selected standard socket directly.
+The module sets OpenSSH's default `IdentityAgent` to
+`/run/user/%i/gnupg/S.yubigpg-ssh-agent` (`%i` is the local UID). Thus tools
+wrapping ordinary SSH follow the selector even if they inherit another
+`SSH_AUTH_SOCK`, such as a Herdr proxy wired to the local agent. Explicit
+per-host `IdentityAgent` options still take precedence and bypass this default.
+
+New login environments set `SSH_AUTH_SOCK` to the same stable selector for
+direct agent consumers such as `ssh-add`. Existing applications retain their
+old environment: ordinary OpenSSH uses the configured `IdentityAgent` anyway;
+direct agent-protocol consumers must be relaunched or pointed at the selector:
+
+```console
+export SSH_AUTH_SOCK="/run/user/$(id -u)/gnupg/S.yubigpg-ssh-agent"
+ssh-add -L
+```
 
 ## Reverse direction
 
@@ -131,7 +148,7 @@ yubigpg use local
 
 The multiplexing settings let multiple SSH-based tools reuse one transport and
 one GPG forwarding listener. `ControlPersist 60` keeps the transport and its
-forwarded socket available for 60 seconds after the last session closes.
+forwarded sockets available for 60 seconds after the last session closes.
 
 To close it immediately:
 
@@ -145,7 +162,7 @@ fail until another connection supplies the endpoint or you choose `local`.
 The receiver's module enables `StreamLocalBindUnlink yes` in sshd, allowing
 ordinary OpenSSH to replace stale forwarding sockets. Use multiplexing for
 concurrent sessions: independently established connections to the same user's
-`.fwd` path can replace each other's listener. Only one provider endpoint is
+fixed forwarding paths can replace each other's listener. Only one provider endpoint is
 selected per receiving user; this is not a multi-provider agent multiplexer.
 
 ## Initial setup and module options
@@ -164,7 +181,7 @@ The module is enabled for both repository hosts in `flake.nix`:
 
 It installs the receiver-side tool, configures systemd's local GPG socket and
 route initialization, enables the GPG SSH and extra sockets, configures client
-`no-autostart`, and enables SSH server stale-socket handling. It does not manage
+`no-autostart` and default SSH `IdentityAgent`, and enables SSH server stale-socket handling. It does not manage
 your SSH client host entries, SSH authentication keys, or public GPG keys.
 It does not require Home Manager. Existing desktop smartcard/pinentry support
 and SSH-server/firewall configuration are provided by the repository's other
@@ -204,19 +221,34 @@ or a shell alias. Home Manager updates remove those settings; in an already
 open shell that loaded the old alias, run `unalias gpg` or open a new shell.
 The normal `~/.gnupg` keyring is used for both modes.
 
+### Upgrade from GPG-only selection (0.2.x)
+
+Version 0.3 also selects the GPG-backed SSH agent. Add the second `RemoteForward`
+entry on the provider and recreate the pooled connection once so OpenSSH
+establishes the new endpoint. Apply the module and run `yubigpg init` to create
+the SSH selector link; this leaves the real local SSH listener at its existing
+path and does not require another socket-layout migration. On the provider,
+use `local`; on the receiver, use `fwd`. No mode-switch rebuilds are needed.
+
 ## Status and troubleshooting
 
 ```text
 Mode:       fwd
-Agent:      reachable
+GPG agent:  reachable
 GPG socket: /run/user/1000/gnupg/S.gpg-agent
 Selected:   /run/user/1000/gnupg/S.gpg-agent.fwd
 Forward to: /run/user/1000/gnupg/S.gpg-agent.fwd
-Route:      configured
+GPG route:  configured
+SSH agent:  reachable (1 identities)
+SSH socket: /run/user/1000/gnupg/S.yubigpg-ssh-agent
+SSH fwd to: /run/user/1000/gnupg/S.gpg-agent.ssh.fwd
+SSH route:  configured
 Key/card:   not checked (reachability does not prove key availability)
 ```
 
-`yubigpg status --json` produces machine-readable output. Probes do not launch
+`yubigpg status --json` produces machine-readable output, including separate GPG
+and SSH availability. SSH probes request public identities, never a signature.
+Probes do not launch
 agents themselves, although connecting to a local systemd-owned socket can
 activate its service. Agent reachability does not prove that a YubiKey is
 attached or that a particular key is available.
@@ -234,6 +266,13 @@ attached or that a particular key is available.
   GPG operation, restore the route, and restart the local GPG units. Do not
   kill the SSH transport or log out of the desktop to repair this.
 - **Extra socket absent on provider:** check `gpg-agent-extra.socket` there.
+- **GPG works but SSH is unavailable:** verify the second `RemoteForward` entry
+  is active. Reusing a pooled connection created before that entry was added
+  can leave the SSH endpoint absent. Check `ssh -G HOST` and restart that pool.
+- **SSH prompts locally despite fwd selection:** inspect `ssh -G DESTINATION`
+  for `identityagent` and check for a per-host override. For direct agent
+  consumers, check `SSH_AUTH_SOCK`; a pre-existing proxy may still use the local
+  agent. Set it to the selector path or relaunch the application.
 - **No secret key:** ensure the receiver's normal public keyring has the key
   and that the provider has the matching YubiKey attached.
 - **PIN prompt absent:** inspect pinentry and the provider's graphical session.
@@ -254,6 +293,9 @@ the watchdog interval while the canonical forward is disconnected, then signs
 locally again. The build also executes the actual generated SSH `Match exec`
 hook against the local socket. Tests cover persistence, misrouting diagnostics,
 path preservation, and ordinary OpenSSH parsing of both forwarding mechanisms.
+An additional test uses real GPG SSH-agent sockets, an authentication subkey,
+`ssh-add`, and `ssh-keygen -Y sign/verify` to test local, forwarded, disconnected,
+and restored-local SSH operations through the same selector.
 The restricted-socket transport test uses a Unix relay; hardware PIN/touch and
 the real two-machine SSH workflow need the acceptance check above.
 

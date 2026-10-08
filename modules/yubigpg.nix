@@ -9,7 +9,7 @@ let
 in
 {
   options.programs.yubigpg = {
-    enable = lib.mkEnableOption "receiver-side local/forwarded GPG socket selection (see docs/yubigpg.md)";
+    enable = lib.mkEnableOption "receiver-side local/forwarded GPG and SSH agent selection (see docs/yubigpg.md)";
     probeTimeout = lib.mkOption {
       type = lib.types.ints.positive;
       default = 3;
@@ -59,6 +59,12 @@ in
     # This repository has no other system-wide programs.ssh.extraConfig blocks;
     # user ~/.ssh/config host entries are independent of this setting.
     programs.ssh.extraConfig = lib.mkForce cfg.package.sshConfig;
+    # New login environments use the stable selector for direct SSH-agent
+    # consumers too. OpenSSH's IdentityAgent above also handles existing tools
+    # whose inherited SSH_AUTH_SOCK still points to a proxy or old local agent.
+    environment.extraInit = lib.mkAfter ''
+      export SSH_AUTH_SOCK="''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}/gnupg/S.yubigpg-ssh-agent"
+    '';
     systemd.user.services.yubigpg-router = {
       description = "Restore the manually selected GnuPG socket route";
       wantedBy = [ "sockets.target" ];

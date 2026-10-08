@@ -256,8 +256,8 @@ in {
   # '';
 
 
-  # NixOS's GnuPG module supplies the local SSH agent when this is unset.
-  # Preserve SSH_AUTH_SOCK supplied by ssh -A instead of overwriting it here.
+  # The yubigpg module supplies the stable selected SSH agent at login.
+  # Keep the socket path out of Home Manager's cached session-variable script.
 
   # Re-enable gnome keyring, which is turned off in configuration.nix. The non-ssh
   # functionality is still required by some apps. See desktop.nix for where

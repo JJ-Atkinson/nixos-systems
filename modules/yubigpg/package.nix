@@ -5,6 +5,8 @@ let
       mkKeyValue = lib.generators.mkKeyValueDefault {} " ";
     }).generate "yubigpg-test-agent.conf" { disable-check-own-socket = ""; };
   sshConfig = ''
+    Host *
+      IdentityAgent /run/user/%i/gnupg/S.yubigpg-ssh-agent
     Match host * exec "${pkgs.runtimeShell} -c '${pkgs.gnupg}/bin/gpg-connect-agent --quiet --no-autostart --raw-socket \"''${XDG_RUNTIME_DIR:-/run/user/$(${pkgs.coreutils}/bin/id -u)}/gnupg/S.gpg-agent.local\" updatestartuptty /bye >/dev/null 2>&1'"
     Match all
   '';
@@ -16,7 +18,7 @@ let
 in
 pkgs.stdenvNoCC.mkDerivation {
   pname = "yubigpg";
-  version = "0.2.1";
+  version = "0.3.0";
   src = ./.;
   nativeBuildInputs = [ pkgs.makeWrapper ];
   nativeCheckInputs = [ pkgs.python3 pkgs.gnupg pkgs.openssh pkgs.git ];

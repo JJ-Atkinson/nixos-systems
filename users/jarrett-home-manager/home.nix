@@ -330,6 +330,45 @@ in {
         }
       ]
   ) // {
+    "zed/settings.json" = {
+      force = true;
+      text = builtins.toJSON {
+        languages.Clojure = {
+          formatter.external = {
+            command = "zprint";
+            arguments = [ ];
+          };
+          format_on_save = "off";
+        };
+      };
+    };
+    "zed/keymap.json" = {
+      force = true;
+      text = builtins.toJSON [
+        {
+          context = "Editor && vim_mode == normal && !menu";
+          bindings = {
+            s = "workspace::SaveAll";
+            "=" = "editor::Format";
+            w = "editor::SelectWord";
+            W = "editor::SelectSmallerSyntaxNode";
+            t = "workspace::NavigateBack";
+            T = "workspace::NavigateForward";
+            b = "editor::GoToDeclaration";
+            q = "editor::Hover";
+            U = "editor::Redo";
+          };
+        }
+        {
+          context = "Editor && vim_mode == visual && !menu";
+          bindings = {
+            "=" = "editor::Format";
+            w = "editor::SelectWord";
+            W = "editor::SelectSmallerSyntaxNode";
+          };
+        }
+      ];
+    };
     uxplayrc.text = "p 17000\n";
     "herdr/config.toml" = {
       force = true;
@@ -338,6 +377,9 @@ in {
 
         [theme]
         name = "terminal"
+
+        [ui]
+        tab_bar_right = [{ type = "hostname" }]
       '';
     };
   };

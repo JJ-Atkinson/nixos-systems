@@ -330,19 +330,7 @@ in {
         }
       ]
   ) // {
-    "zed/settings.json" = {
-      force = true;
-      text = builtins.toJSON {
-        languages.Clojure = {
-          formatter.external = {
-            command = "zprint";
-            arguments = [ ];
-          };
-          format_on_save = "off";
-        };
-      };
-    };
-    "zed/keymap.json" = {
+   "zed/keymap.json" = {
       force = true;
       text = builtins.toJSON [
         {
@@ -350,11 +338,12 @@ in {
           bindings = {
             s = "workspace::SaveAll";
             "=" = "editor::Format";
-            w = "editor::SelectWord";
+            w = "editor::SelectLargerSyntaxNode";
             W = "editor::SelectSmallerSyntaxNode";
-            t = "workspace::NavigateBack";
-            T = "workspace::NavigateForward";
-            b = "editor::GoToDeclaration";
+            t = "pane::GoBack";
+            T = "pane::GoForward";
+            b = "editor::GoToDefinition";
+            "shift-b" = "editor::FindAllReferences";
             q = "editor::Hover";
             U = "editor::Redo";
           };
@@ -363,7 +352,7 @@ in {
           context = "Editor && vim_mode == visual && !menu";
           bindings = {
             "=" = "editor::Format";
-            w = "editor::SelectWord";
+            w = "editor::SelectLargerSyntaxNode";
             W = "editor::SelectSmallerSyntaxNode";
           };
         }

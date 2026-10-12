@@ -9,6 +9,23 @@ let
         --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [ nixpkgsUnstable.stdenv.cc.cc.lib ]}"
     '';
   });
+  zedClojureLauncher = nixpkgs.writeShellScriptBin "zeditor" ''
+    set -euo pipefail
+
+    bundle=/home/jarrett/.local/share/zed-clojure-current
+    if [[ ! -x "$bundle/zed" ]]; then
+      echo "Custom Zed binary is missing: $bundle/zed" >&2
+      exit 1
+    fi
+    if [[ ! -r "$bundle/remote_server.gz" ]]; then
+      echo "Custom Zed remote server is missing: $bundle/remote_server.gz" >&2
+      exit 1
+    fi
+
+    export ZED_COPY_REMOTE_SERVER="$bundle/remote_server.gz"
+    export ZED_UPDATE_EXPLANATION="This custom Zed build is managed through /etc/nixos."
+    exec "$bundle/zed" "$@"
+  '';
   keycount-daemon = nixpkgs.runCommandCC "keycount-daemon" { } ''
     mkdir -p $out/bin
     $CC -O2 -Wall -Wextra -o $out/bin/keycount-daemon ${./keycount/keycount-daemon.c}
@@ -29,6 +46,7 @@ in {
     telegram-desktop
     nixpkgsUnstable.vscode-fhs
     nixpkgsUnstable.zed-editor
+    (lib.hiPrio zedClojureLauncher)
     discord
     spotify
     slack
@@ -82,6 +100,7 @@ in {
     nixpkgsUnstable.appimage-run
     opencodeWithLibstdcpp
     nixpkgsUnstable.herdr
+    nixpkgsUnstable.deezer-desktop
 
     # gnome apps
     gnome-tweaks
@@ -354,6 +373,278 @@ in {
             "=" = "editor::Format";
             w = "editor::SelectLargerSyntaxNode";
             W = "editor::SelectSmallerSyntaxNode";
+          };
+        }
+        {
+          context = "Editor && !menu && (vim_mode == normal || vim_mode == visual) && (extension == clj || extension == cljs || extension == cljc || extension == cljd || extension == edn || extension == bb)";
+          bindings = {
+            "z enter" = null;
+            "z -" = null;
+            "z ^" = null;
+            "z +" = null;
+            "z t" = null;
+            "z z" = null;
+            "z ." = null;
+            "z b" = null;
+            "z a" = null;
+            "z shift-a" = null;
+            "z c" = null;
+            "z shift-c" = null;
+            "z o" = null;
+            "z shift-o" = null;
+            "z f" = null;
+            "z shift-m" = null;
+            "z shift-r" = null;
+            "z l" = null;
+            "z h" = null;
+            "z shift-l" = null;
+            "z shift-h" = null;
+            "shift-z shift-z" = null;
+            "shift-z shift-q" = null;
+          };
+        }
+        {
+          context = "Editor && !menu && (vim_mode == normal || vim_mode == visual) && (extension == clj || extension == cljc || extension == cljs || extension == edn || extension == bb)";
+          bindings = {
+            "space r p" = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+                use_selection_context = true;
+                variables = {
+                  snippet = "portal";
+                };
+              }
+            ];
+            "space r r" = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+                use_selection_context = true;
+                variables = {
+                  snippet = "refresh-all";
+                };
+              }
+            ];
+            "space r c" = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+                use_selection_context = true;
+                variables = {
+                  snippet = "refresh-all-clj-reload";
+                };
+              }
+            ];
+            "space r t" = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+                use_selection_context = true;
+                variables = {
+                  snippet = "portal-test";
+                };
+              }
+            ];
+            "space r l" = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+                use_selection_context = true;
+                variables = {
+                  snippet = "load-file";
+                };
+              }
+            ];
+            "space r 0" = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+                use_selection_context = true;
+                variables = {
+                  snippet = "use-remote";
+                };
+              }
+            ];
+            "space r 1" = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+                use_selection_context = true;
+                variables = {
+                  snippet = "use-jvm";
+                };
+              }
+            ];
+            "space r 2" = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+                use_selection_context = true;
+                variables = {
+                  snippet = "use-node";
+                };
+              }
+            ];
+            "space r w" = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+                use_selection_context = true;
+                variables = {
+                  snippet = "reload";
+                };
+              }
+            ];
+            "space r e" = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+                use_selection_context = true;
+                variables = {
+                  snippet = "restart";
+                };
+              }
+            ];
+            "space r a" = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+                use_selection_context = true;
+                variables = {
+                  snippet = "tap";
+                };
+              }
+            ];
+            "space r u" = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+                use_selection_context = true;
+                variables = {
+                  snippet = "unbreak";
+                };
+              }
+            ];
+          };
+        }
+        {
+          context = "Editor && vim_mode == normal && !menu && (extension == clj || extension == cljc || extension == cljs || extension == cljd || extension == edn || extension == bb)";
+          bindings = {
+            z = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+              }
+            ];
+            "shift-z" = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+                variables = {
+                  snippet = "tap";
+                };
+              }
+            ];
+          };
+        }
+        {
+          context = "Editor && vim_mode == visual && !menu && (extension == clj || extension == cljc || extension == cljs || extension == edn || extension == bb)";
+          bindings = {
+            z = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+                use_selection_context = true;
+                variables = {
+                  snippet = "evaluate";
+                };
+              }
+            ];
+            "shift-z" = [
+              "editor::SpawnNearestTask"
+              {
+                reveal = "never";
+                use_selection_context = true;
+                variables = {
+                  snippet = "tap";
+                };
+              }
+            ];
+          };
+        }
+        {
+          context = "Editor && vim_mode == normal && !menu && (extension == clj || extension == cljc || extension == cljs || extension == bb)";
+          bindings = {
+            "shift-j" = [
+              "editor::ExecuteLspCommand"
+              {
+                server = "clojure-lsp";
+                command = "forward-sexp-or-up";
+                arguments = [ "$uri" "$line" "$column" ];
+              }
+            ];
+            "shift-k" = [
+              "editor::ExecuteLspCommand"
+              {
+                server = "clojure-lsp";
+                command = "backward-sexp-or-up";
+                arguments = [ "$uri" "$line" "$column" ];
+              }
+            ];
+            "shift-h" = [
+              "editor::ExecuteLspCommand"
+              {
+                server = "clojure-lsp";
+                command = "forward-barf";
+                arguments = [ "$uri" "$line" "$column" ];
+              }
+            ];
+            "shift-l" = [
+              "editor::ExecuteLspCommand"
+              {
+                server = "clojure-lsp";
+                command = "forward-slurp";
+                arguments = [ "$uri" "$line" "$column" ];
+              }
+            ];
+            "shift-m" = [
+              "editor::ExecuteLspCommand"
+              {
+                server = "clojure-lsp";
+                command = "drag-backward";
+                arguments = [ "$uri" "$line" "$column" ];
+              }
+            ];
+            m = [
+              "editor::ExecuteLspCommand"
+              {
+                server = "clojure-lsp";
+                command = "drag-forward";
+                arguments = [ "$uri" "$line" "$column" ];
+              }
+            ];
+          };
+        }
+        {
+          context = "Editor && vim_mode == visual && !menu && (extension == clj || extension == cljc || extension == cljs || extension == bb)";
+          bindings = {
+            "shift-j" = [
+              "editor::ExecuteLspCommand"
+              {
+                server = "clojure-lsp";
+                command = "backward-select";
+                arguments = [ "$uri" "$line" "$column" ];
+              }
+            ];
+            "shift-k" = [
+              "editor::ExecuteLspCommand"
+              {
+                server = "clojure-lsp";
+                command = "forward-select";
+                arguments = [ "$uri" "$line" "$column" ];
+              }
+            ];
           };
         }
       ];

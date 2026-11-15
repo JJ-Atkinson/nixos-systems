@@ -283,6 +283,12 @@ attached or that a particular key is available.
   keyboxd.service`. Before deploying the fix, `gpgconf --launch keyboxd`
   starts just that daemon for the current session; do not remove
   `no-autostart` or launch all GnuPG daemons, which could steal the route.
+- **Socket is active/listening but its pathname is missing:** systemd can
+  retain a listening descriptor after another process removes its pathname.
+  For `S.keyboxd`, close any active GPG operation, then run
+  `systemctl --user stop keyboxd.service` followed by
+  `systemctl --user restart keyboxd.socket` to recreate the endpoint.
+  A rebuild with unchanged units does not necessarily restart that socket.
 - **PIN prompt absent:** inspect pinentry and the provider's graphical session.
 - **Wrong mode persists:** `yubigpg use local` resets it. A mode is user-wide,
   so all ordinary GPG clients share the choice.
@@ -293,6 +299,9 @@ attached or that a particular key is available.
 
 Implementation: `modules/yubigpg/tool.py`; package: `modules/yubigpg/package.nix`.
 The package build runs tests with isolated homes and disposable software keys.
+Run them through `nix build`: outside the sandbox, GnuPG may use the logged-in
+user's runtime sockets even with a temporary `HOME`/`GNUPGHOME`. The suite
+refuses to initialize or clean up socket paths outside its disposable home.
 They emulate systemd's named socket descriptors with real supervised GPG
 agents, switch the standard symlink, invoke **unmodified GPG and Git**, verify
 forwarded signing/decryption and return to local signing, and check disconnected

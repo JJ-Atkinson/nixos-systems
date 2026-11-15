@@ -34,6 +34,14 @@ class SelectorTests(unittest.TestCase):
         })
         self.environment.start()
         self.tool = Tool()
+        # HOME/GNUPGHOME do not isolate sockets on a logged-in Linux system:
+        # GnuPG can still select /run/user/<uid>/gnupg. Never initialize routes
+        # or run --remove-socketdir against the real session. Nix's build
+        # sandbox has no such runtime directory and uses the disposable home.
+        if not self.tool.paths()["standard"].is_relative_to(self.home):
+            self.environment.stop()
+            self.directory.cleanup()
+            self.skipTest("GnuPG selected session sockets; run tests via nix build")
         self.tool.init()
         self.agents = []
         self.agent_homes = [self.tool.gpg_home]

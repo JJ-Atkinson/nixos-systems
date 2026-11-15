@@ -22,15 +22,24 @@
   # Use absolute paths: install-systemd-boot.sh runs with a minimal PATH, so
   # bare `mountpoint` fails ("command not found") and the mirror is always skipped.
   boot.loader.systemd-boot.extraInstallCommands = ''
-    if ${pkgs.util-linux}/bin/mountpoint -q /boot-fallback; then
-      ${pkgs.rsync}/bin/rsync -aH --info=stats1 /boot/ /boot-fallback/
+    if ! ${pkgs.util-linux}/bin/mountpoint -q /boot; then
+      echo "ERROR: /boot is not mounted; refusing to mirror an ordinary directory" >&2
+      exit 1
+    elif ${pkgs.util-linux}/bin/mountpoint -q /boot-fallback; then
+      if [ "$(${pkgs.util-linux}/bin/findmnt -n -o MAJ:MIN --target /boot)" != \
+           "$(${pkgs.util-linux}/bin/findmnt -n -o MAJ:MIN --target /boot-fallback)" ]; then
+        ${pkgs.rsync}/bin/rsync -aH --info=stats1 /boot/ /boot-fallback/
+      else
+        echo "WARN: /boot is the promoted fallback ESP; no second ESP to mirror" >&2
+      fi
     else
       echo "WARN: /boot-fallback not mounted; skipping ESP mirror" >&2
     fi
   '';
 
-  # Use latest kernel.
-  boot.kernelPackages = pkgs.linuxPackages_latest;
+  # Keep the kernel and external modules (including kvmfr) on the same
+  # 7.3 package set from the stable NixOS input.
+  boot.kernelPackages = pkgs.linuxPackages_7_3;
 
   # NVMe Host Memory Buffer cap. SN7100s report hmpre=78 MiB / hmmin=32 MiB.
   # First attempt at 128 produced asymmetric allocation: nvme1 got full 78 MiB
@@ -40,7 +49,15 @@
   # behind the 2026-05-18 vm-storage csum-error incident. Bumped to 512 so
   # every drive gets its preferred allocation with headroom. User confirmed
   # ~512 MiB of RAM dedicated to HMB is acceptable.
-  boot.kernelParams = [ "nvme.max_host_mem_size_mb=512" ];
+  boot.kernelParams = [
+    "nvme.max_host_mem_size_mb=512"
+    # Cache swapped pages in compressed RAM before using mirrored NVMe swap.
+    # The pool grows on demand; 20% is a cap, not reserved memory.
+    "zswap.enabled=1"
+    "zswap.compressor=lz4"
+    "zswap.max_pool_percent=20"
+    "zswap.shrinker_enabled=0"
+  ];
 
   # Prefer dropping file cache over paging idle heaps. Default 60 let ~50G of
   # cold JVM/browser anon sit on LUKS swap and thrash the NVMes when it woke up.

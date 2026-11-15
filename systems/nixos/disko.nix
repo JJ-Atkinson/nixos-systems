@@ -51,12 +51,13 @@
         };
       };
 
-      # disk_b: Solidigm SSDPFKNU020TZ 2TB — carries the btrfs filesystem
-      # definition; mkfs joins disk_a's mapper into the same RAID1 filesystem.
-      # Serial PHEH308200MD2P0C.
+      # disk_b: replacement WD_BLACK SN7100 2TB, serial 25156Z800969.
+      # Replaced the Solidigm on 2026-10-22 using btrfs replace, not disko.
+      # For fresh installs, this carries the btrfs filesystem definition;
+      # mkfs joins disk_a's mapper into the same RAID1 filesystem.
       disk_b = {
         type = "disk";
-        device = "/dev/disk/by-id/nvme-SOLIDIGM_SSDPFKNU020TZ_PHEH308200MD2P0C";
+        device = "/dev/disk/by-id/nvme-WD_BLACK_SN7100_2TB_25156Z800969";
         content = {
           type = "gpt";
           partitions = {

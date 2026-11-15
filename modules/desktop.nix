@@ -8,9 +8,6 @@
 
   # https://discourse.nixos.org/t/how-to-set-fractional-scaling-via-nix-configuration-for-gnome-wayland/56774
   # fractional scaling enable?
-  services.displayManager.gdm = {
-    wayland = true;
-  };
   services.desktopManager.gnome = {
     # extraGSettingsOverridePackages = [ pkgs.mutter ];
     extraGSettingsOverrides = ''

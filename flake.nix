@@ -2,7 +2,7 @@
   description = "Two nixpkgs sets: stable and unstable";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     sops-nix.url = "github:Mic92/sops-nix";
     sops-nix.inputs.nixpkgs.follows = "nixpkgs";
@@ -23,7 +23,7 @@
     };
 
     home-manager = {
-      url = "github:nix-community/home-manager/release-25.11";
+      url = "github:nix-community/home-manager/release-26.05";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -65,6 +65,18 @@
         inherit inputs nixos-hardware;
       };
 
+      # sops-nix needs go >= 1.26. Stable nixpkgs default go is 1.25.
+      sopsGo126Module =
+        { pkgs, ... }:
+        {
+          sops.package =
+            (pkgs.callPackage "${sops-nix}/default.nix" { }).sops-install-secrets.override
+              {
+                buildGoModule = pkgs.buildGoModule.override { go = pkgs.go_1_26; };
+                go = pkgs.go_1_26;
+              };
+        };
+
       rpiPkgs = import nixpkgs {
         system = rpiSystem;
         config.allowUnfree = true;
@@ -86,6 +98,7 @@
         inherit system specialArgs;
         modules = [
           sops-nix.nixosModules.sops
+          sopsGo126Module
           disko.nixosModules.disko
           ./systems/nixos/disko.nix
           ./systems/nixos/initrd-luks-tolerant.nix
@@ -108,7 +121,7 @@
           ./modules/ssh-access.nix
           ./modules/tailscale.nix
           ./modules/share-public
-          ./modules/pgadmin.nix
+          # ./modules/pgadmin.nix  # disabled — pgadmin not in use
           ./modules/nix-serve.nix
           ./modules/nixos-cache.nix
           ./modules/nixos-auto-upgrade-reboot-notifier.nix
@@ -169,6 +182,7 @@
         inherit system specialArgs;
         modules = [
           sops-nix.nixosModules.sops
+          sopsGo126Module
           nixos-hardware.nixosModules.framework-amd-ai-300-series
           ucodenix.nixosModules.default
           disko.nixosModules.disko

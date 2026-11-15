@@ -221,6 +221,49 @@ class SelectorTests(unittest.TestCase):
         )
         return fingerprint
 
+    def test_keyboxd_with_no_autostart_uses_supervised_socket(self):
+        home = self.tool.gpg_home
+        (home / "common.conf").write_text("use-keyboxd\n")
+        (home / "gpg.conf").write_text("no-autostart\n")
+        paths = self.tool.paths()
+        self.start_agent(home, paths["local"], paths["local"].with_name("S.gpg-agent.extra"))
+
+        missing = subprocess.run(["gpg", "--homedir", str(home), "--batch", "--list-keys"],
+                                 capture_output=True)
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn(b"no keybox daemon running", missing.stderr.lower())
+
+        keyboxd = next(
+            line.split(":", 2)[2]
+            for line in subprocess.run(
+                [self.tool.gpgconf, "--list-components"], check=True, capture_output=True, text=True,
+            ).stdout.splitlines()
+            if line.startswith("keyboxd:")
+        )
+        keybox_socket = paths["standard"].with_name("S.keyboxd")
+        log_path = home / "test-keyboxd.log"
+        log = log_path.open("wb")
+        daemon = subprocess.Popen(
+            [sys.executable, str(LAUNCHER), "--keyboxd",
+             keyboxd, str(home), str(keybox_socket)],
+            stdout=log, stderr=subprocess.STDOUT,
+        )
+        self.agents.append((daemon, log))
+        deadline = time.monotonic() + 5
+        while not keybox_socket.exists():
+            if daemon.poll() is not None or time.monotonic() >= deadline:
+                self.fail(log_path.read_text())
+            time.sleep(0.02)
+
+        fingerprint = self.generate_key(home, "keyboxd-local")
+        signed = subprocess.run(
+            ["gpg", "--homedir", str(home), "--batch", "--local-user", fingerprint, "--clearsign"],
+            input=b"keyboxd regression\n", check=True, capture_output=True,
+        )
+        subprocess.run(["gpg", "--homedir", str(home), "--batch", "--verify"], input=signed.stdout,
+                       check=True, capture_output=True)
+        self.assertEqual(os.readlink(paths["standard"]), paths["local"].name)
+
     def test_ssh_agent_signing_follows_the_same_selection(self):
         paths = self.tool.paths()
         self.start_agent(self.tool.gpg_home, paths["local"], paths["local"].with_name("S.gpg-agent.extra"))

@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Run after the missing-drive boot tests pass, with BOTH original disks still
+# connected. Resizing does not require booting the recovery generation first.
+# Install and verify that generation before physically removing either disk.
+# This shrinks Btrfs device 1, not a partition or LUKS container. It preserves
+# RAID1. No disk is removed, formatted, or wiped.
+set -euo pipefail
+
+die() { echo "ERROR: $*" >&2; exit 1; }
+[[ $EUID -eq 0 ]] || die "Run this script with sudo."
+
+fsid=6137e9a6-e9b2-49e6-9ac4-03e044ee845a
+wd=/dev/disk/by-id/nvme-WD_BLACK_SN7100_2TB_25306L805271
+solidigm=/dev/disk/by-id/nvme-SOLIDIGM_SSDPFKNU020TZ_PHEH308200MD2P0C
+[[ -b $wd && -b $solidigm ]] || die "Both original disks must still be connected."
+[[ -b /dev/mapper/cryptbtrfs_a && -b /dev/mapper/cryptbtrfs_b ]] || die "Both original containers must be open."
+[[ $(findmnt -n -o UUID /) == "$fsid" ]] || die "Unexpected root filesystem."
+[[ $(findmnt -n -o FSTYPE /) == btrfs ]] || die "Root is not Btrfs."
+for role in a b; do
+  expected=$(readlink -f "/dev/disk/by-partlabel/disk-disk_${role}-crypt")
+  actual=$(cryptsetup status "cryptbtrfs_$role" | awk '$1 == "device:" {print $2}')
+  [[ $(readlink -f "$actual") == "$expected" ]] || die "Container $role is on an unexpected partition."
+done
+[[ $(readlink -f /dev/disk/by-partlabel/disk-disk_a-crypt) == "$(readlink -f "$wd")p3" ]] || die "disk_a is not the expected WD."
+[[ $(readlink -f /dev/disk/by-partlabel/disk-disk_b-crypt) == "$(readlink -f "$solidigm")p3" ]] || die "disk_b is not the expected Solidigm."
+
+for id in 1 2; do
+  [[ $(cat "/sys/fs/btrfs/$fsid/devinfo/$id/missing") == 0 ]] || die "A Btrfs member is already missing."
+done
+[[ $(cat "/sys/fs/btrfs/$fsid/exclusive_operation") == none ]] || die "A Btrfs exclusive operation is in progress."
+
+# Device IDs are taken from the live superblock inventory, not NVMe numbering.
+inventory=$(btrfs filesystem show --raw /)
+solidigm_line=$(printf '%s\n' "$inventory" | awk '$1 == "devid" && $2 == 1')
+[[ $solidigm_line == *"path /dev/mapper/cryptbtrfs_b" ]] || die "Btrfs device 1 is not the Solidigm mapper; inspect manually."
+current=$(printf '%s\n' "$solidigm_line" | awk '{print $4}')
+survivor_size=$(blockdev --getsize64 /dev/mapper/cryptbtrfs_a)
+# Leave 1 GiB of margin for replacement encryption-layout differences.
+target=$(( (survivor_size - 1073741824) / 1048576 * 1048576 ))
+(( target > 0 )) || die "Invalid target size."
+if (( current <= target )); then
+  echo "Btrfs device 1 is already small enough ($current bytes); nothing to do."
+  exit 0
+fi
+
+echo "Solidigm Btrfs device 1: $current -> $target bytes."
+echo "The WD, partitions, LUKS headers, and RAID1 profiles will not be resized."
+echo "Pause heavy writes/VMs first; relocation can temporarily increase I/O latency."
+echo "A clean recent scrub and a usable backup are prerequisites."
+read -r -p 'Type SHRINK-SOLIDIGM to proceed: ' confirmation
+[[ $confirmation == SHRINK-SOLIDIGM ]] || die "Cancelled."
+
+systemd-inhibit --what=sleep --mode=block \
+  --who=desktop-disk-migration --why='Preparing Btrfs member size for replacement' \
+  btrfs filesystem resize "1:$target" /
+
+btrfs filesystem show --raw /
+btrfs device stats /
+echo "Size preparation finished. Do NOT remove the disk until boot readiness is verified."

@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Read-only inventory before removing either member of the desktop mirror.
+# Run: sudo bash /etc/nixos/bin/desktop-disk-preflight
+set -euo pipefail
+
+if [[ $EUID -ne 0 ]]; then
+  echo "Run with sudo; SMART and detailed Btrfs allocation require root." >&2
+  exit 1
+fi
+
+wd=/dev/disk/by-id/nvme-WD_BLACK_SN7100_2TB_25306L805271
+solidigm=/dev/disk/by-id/nvme-SOLIDIGM_SSDPFKNU020TZ_PHEH308200MD2P0C
+for disk in "$wd" "$solidigm"; do
+  if [[ ! -b $disk ]]; then
+    echo "Expected disk is absent: $disk. Stop and check physical identities." >&2
+    exit 1
+  fi
+done
+
+echo '=== Physical disks, partition sizes and filesystem identities ==='
+lsblk -b -o NAME,SIZE,MODEL,SERIAL,FSTYPE,UUID,PARTLABEL
+echo '=== WD health ==='
+# smartctl's status is a bit mask: keep displaying the remaining diagnostics
+# even if the drive reports a health problem. Do not interpret that as clean.
+smartctl -x "$wd" || echo "WARNING: smartctl reported status $? for the WD."
+echo '=== Solidigm health ==='
+smartctl -x "$solidigm" || echo "WARNING: smartctl reported status $? for the Solidigm."
+echo '=== Btrfs device IDs and exact usable sizes ==='
+btrfs filesystem show --raw /
+btrfs filesystem usage -b /
+echo '=== Btrfs error counters (not reset) ==='
+btrfs device stats /
+echo '=== Last recorded scrub (this does NOT start a scrub) ==='
+btrfs scrub status -R /
+echo '=== Swap mirror ==='
+cat /proc/mdstat
+mdadm --detail /dev/md/swap
+echo '=== EFI mount identities ==='
+findmnt /boot
+findmnt /boot-fallback
+echo '=== Last backup service result (not proof of a usable backup) ==='
+systemctl show restic-remote-backup.service \
+  -p Result -p ExecMainStatus -p ExecMainStartTimestamp -p ExecMainExitTimestamp
+echo '=== Recent backup journal ==='
+journalctl -u restic-remote-backup.service --no-pager -n 35
+echo '=== No disks were resized, formatted, or modified by this script ==='

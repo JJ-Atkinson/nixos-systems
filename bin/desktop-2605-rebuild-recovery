@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# Preparation/evidence only: never rebuild, switch branches, or reboot.
+set -euo pipefail
+umask 077
+# Read-only Git inspection must not refresh/recreate the user's index as root.
+export GIT_OPTIONAL_LOCKS=0
+
+repo=/etc/nixos
+base=/root/nixos-recovery
+old_system=/nix/store/643jm8wga6q7rkgcjqg8cdnljw59p5lx-nixos-system-nixos-25.11.20260630.b6018f8
+probe_system=/nix/store/46f6f5frr3w0197zdcvcqv2cxdd8jcaq-nixos-system-nixos-26.05.20261108.ac588ef
+old_loader=/nix/store/ckb44g2gn1ma5y47kh2bhk0zximhgqyi-systemd-258.7/lib/systemd/boot/efi/systemd-bootx64.efi
+
+die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+check_esps() {
+  local spec esp uuid
+  for spec in /boot:39D8-C2B4 /boot-fallback:CC3A-6251; do
+    esp=${spec%:*}; uuid=${spec##*:}
+    [[ $(findmnt -rn -o UUID --mountpoint "$esp") == "$uuid" ]] ||
+      die "$esp is not the expected mounted ESP ($uuid)"
+  done
+}
+capture() {
+  local out=$1 esp
+  mkdir -p "$out"
+  {
+    date --iso-8601=seconds
+    uname -a
+    printf '\nCommand line:\n'; tr ' ' '\n' < /proc/cmdline
+    printf '\nBooted, current, profile closures:\n'
+    readlink -f /run/booted-system /run/current-system /nix/var/nix/profiles/system
+    printf '\nMounts:\n'; findmnt -rn -o TARGET,SOURCE,FSTYPE,UUID
+    printf '\nUpgrade/update units:\n'
+    systemctl show nixos-upgrade.service nixos-upgrade.timer systemd-boot-update.service \
+      -p Id -p LoadState -p ActiveState
+    printf '\nFailed units:\n'; systemctl --failed --no-pager
+  } > "$out/system.txt"
+  bootctl status --no-pager > "$out/bootctl-status.txt" 2>&1 ||
+    printf 'bootctl returned nonzero; see bootctl-status.txt\n' >&2
+  bootctl list --no-pager > "$out/bootctl-list.txt" 2>&1 || true
+  journalctl --sync
+  journalctl --list-boots --no-pager > "$out/journal-boots.txt"
+  journalctl -b --no-pager -o short-monotonic > "$out/journal.txt"
+  journalctl -b -u 'systemd-cryptsetup@*' --no-pager -o short-monotonic \
+    > "$out/cryptsetup-journal.txt"
+  for esp in /boot /boot-fallback; do
+    mkdir -p "$out/${esp##*/}"
+    cp -a "$esp/loader/loader.conf" "$esp/loader/entries" "$out/${esp##*/}/"
+    (
+      cd "$esp"
+      find EFI loader -type f ! -path 'loader/random-seed' -print0 |
+        sort -z | xargs -0 -r sha256sum
+    ) > "$out/${esp##*/}/files.sha256"
+  done
+  git -C "$repo" -c safe.directory="$repo" status --short > "$out/git-status.txt"
+  git -C "$repo" -c safe.directory="$repo" rev-parse HEAD > "$out/git-head.txt"
+  git -C "$repo" -c safe.directory="$repo" diff --binary HEAD > "$out/git-diff.patch"
+  cp "$repo/flake.nix" "$repo/flake.lock" "$out/"
+}
+
+[[ $EUID == 0 ]] || die "Run with sudo bash $0 prepare|after [backup-directory]"
+check_esps
+case ${1:-} in
+  prepare)
+    [[ $# == 1 ]] || die "Usage: sudo bash $0 prepare"
+    [[ $(readlink -f /run/booted-system) == "$probe_system" ]] ||
+      die "Not booted into the successful generation 158 probe"
+    [[ $(readlink -f /run/current-system) == "$probe_system" ]] ||
+      die "Current userspace differs from the successful probe"
+    for unit in nixos-upgrade.service nixos-upgrade.timer systemd-boot-update.service; do
+      [[ $(systemctl show "$unit" -p LoadState --value) == masked &&
+         $(systemctl show "$unit" -p ActiveState --value) == inactive ]] ||
+        die "$unit must be masked and inactive before preparation"
+    done
+    [[ -r "$repo/bin/desktop-restore-2587-efi" ]] || die "Restore helper is missing"
+    for esp in /boot /boot-fallback; do
+      for loader in EFI/BOOT/BOOTX64.EFI EFI/systemd/systemd-bootx64.efi; do
+        cmp -s "$old_loader" "$esp/$loader" || die "$esp/$loader is not known-good 258.7"
+      done
+      for generation in 158 159; do
+        [[ -f "$esp/loader/entries/nixos-generation-$generation.conf" ]] ||
+          die "Generation $generation missing from $esp"
+      done
+      # Preserve verified boot artifacts, not just menu files.
+      cmp -s "$probe_system/kernel" "$esp/EFI/nixos/rsgdg4a94b2bmr7z59svdx60f48sl2by-linux-7.3.3-bzImage.efi" ||
+        die "Generation 158 kernel mismatch on $esp"
+      cmp -s "$probe_system/initrd" "$esp/EFI/nixos/kx0y7iblkqgfxqck62syrfhmpm70y55f-initrd-linux-7.3.3-initrd.efi" ||
+        die "Generation 158 initrd mismatch on $esp"
+      entry=$esp/loader/entries/nixos-generation-159.conf
+      for field in linux initrd options; do
+        [[ $(awk -v key="$field" '$1 == key { n++ } END { print n+0 }' "$entry") == 1 ]] ||
+          die "Expected exactly one $field line in $entry"
+      done
+      linux=$(awk '$1 == "linux" { print $2 }' "$entry")
+      initrd=$(awk '$1 == "initrd" { print $2 }' "$entry")
+      options=$(awk '$1 == "options" { $1=""; print }' "$entry")
+      [[ "$linux" == /EFI/nixos/* && "$initrd" == /EFI/nixos/* ]] ||
+        die "Unexpected generation 159 artifact paths"
+      cmp -s "$old_system/kernel" "$esp$linux" || die "G159 kernel mismatch on $esp"
+      cmp -s "$old_system/initrd" "$esp$initrd" || die "G159 initrd mismatch on $esp"
+      [[ " $options " == *" init=$old_system/init "* && "$options" != *debug_shell* ]] ||
+        die "G159 is not the expected non-debug 25.11 recovery entry"
+    done
+    mkdir -p "$base"
+    backup=$(mktemp -d "$base/pre-2605-rebuild-$(date +%Y%m%dT%H%M%S)-XXXXXX")
+    printf 'Preparing private backup: %s\n' "$backup"
+    capture "$backup/before"
+    cp "$old_loader" "$backup/systemd-boot-258.7.efi"
+    cp "$repo/bin/desktop-restore-2587-efi" "$backup/restore-efi.sh"
+    cp "$repo/docs/history/2026-11-13-nixos-boot-recovery.md" "$backup/RECOVERY-HANDOFF.md"
+    tar -C "$repo" -cpf "$backup/etc-nixos.tar" .
+    for esp in /boot /boot-fallback; do
+      # Do not save/replay the boot random seed.
+      tar -C "$esp" --exclude='./loader/random-seed' \
+        -cpf "$backup/${esp##*/}.tar" .
+      tar -C "$esp" --compare --file="$backup/${esp##*/}.tar"
+    done
+    # Keep both known-good closures available even if later GC runs.
+    nix-store --add-root "$backup/gcroot-25.11" --realise "$old_system" > /dev/null
+    nix-store --add-root "$backup/gcroot-26.05" --realise "$probe_system" > /dev/null
+    (
+      cd "$backup"
+      # shellcheck disable=SC2094
+      find . -type f ! -name SHA256SUMS -print0 |
+        sort -z | xargs -0 -r sha256sum > SHA256SUMS
+      sha256sum --check SHA256SUMS
+    )
+    touch "$backup/PREPARED"
+    ln -sfn "${backup##*/}" "$base/latest-pre-2605-rebuild"
+    sync
+    printf '\nREADY: %s\n' "$backup"
+    printf 'No boot defaults, EFI binaries, branches or system profiles changed.\n'
+    printf 'Restore: sudo bash %q %q\n' "$backup/restore-efi.sh" "$backup"
+    ;;
+  after)
+    [[ $# -le 2 ]] || die "Usage: sudo bash $0 after [backup-directory]"
+    backup=$(realpath "${2:-$base/latest-pre-2605-rebuild}")
+    [[ -f "$backup/PREPARED" ]] || die "No completed preparation at $backup"
+    out=$(mktemp -d "$backup/after-$(date +%Y%m%dT%H%M%S)-XXXXXX")
+    capture "$out"
+    sync
+    printf 'Evidence saved: %s\n' "$out"
+    printf 'Before reboot, Current Boot Loader still describes this running boot.\n'
+    printf 'Inspect on-disk loader versions and profile/entry paths for rebuild changes.\n'
+    ;;
+  *) die "Usage: sudo bash $0 prepare|after [backup-directory]" ;;
+esac

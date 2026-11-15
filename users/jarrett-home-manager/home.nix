@@ -59,6 +59,7 @@ in {
     nixpkgsUnstable.caligula
     nixpkgsUnstable.signal-desktop
     nixpkgsUnstable.zoom-us
+    nixpkgsUnstable.blender
     syncthing
     gnupg
     yubikey-manager
@@ -86,7 +87,7 @@ in {
     wireshark
     inkscape
     telegram-desktop
-    nixpkgsUnstable.brave
+    # nixpkgsUnstable.brave
     nixpkgsUnstable.firefox
     mc
     bat # like cat but nicer
@@ -126,7 +127,7 @@ in {
     leiningen
     # system-jdk
     maven
-    nodejs_20
+    nodejs_24
     cljfmt
     zprint
     clojure-lsp
@@ -292,7 +293,7 @@ in {
   #   enable = true;
   # };
 
-  # Open on GNOME/Wayland graphical login only (XDG autostart; not SSH).
+  # Keep graphical login light: only Firefox and 1Password (not SSH).
   xdg.configFile = lib.listToAttrs (
     map
       (app: {
@@ -308,44 +309,14 @@ in {
       })
       [
         {
-          id = "slack";
-          name = "Slack";
-          exec = "${nixpkgs.slack}/bin/slack -s";
-        }
-        {
           id = "firefox";
           name = "Firefox";
           exec = "${nixpkgsUnstable.firefox}/bin/firefox";
         }
         {
-          id = "deezer";
-          name = "Deezer";
-          exec = "${nixpkgsUnstable.brave}/bin/brave --profile-directory=Default --app-id=dbjlimibnhmfcgadnpbfgkmmeijhieif";
-        }
-        {
-          id = "ghostty";
-          name = "Ghostty";
-          exec = "${nixpkgsUnstable.ghostty}/bin/ghostty --gtk-single-instance=true";
-        }
-        {
-          id = "discord";
-          name = "Discord";
-          exec = "${nixpkgs.discord}/bin/Discord";
-        }
-        {
           id = "1password";
           name = "1Password";
           exec = "1password";
-        }
-        {
-          id = "chromium";
-          name = "Chromium";
-          exec = "${nixpkgs.chromium}/bin/chromium";
-        }
-        {
-          id = "nautilus";
-          name = "Files";
-          exec = "nautilus";
         }
       ]
   ) // {

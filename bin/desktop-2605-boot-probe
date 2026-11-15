@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Install a diagnostic entry for the existing generation 158.
+# Never rebuild, switch, replace EFI binaries, change defaults, or reboot.
+set -euo pipefail
+
+system=/nix/store/46f6f5frr3w0197zdcvcqv2cxdd8jcaq-nixos-system-nixos-26.05.20261108.ac588ef
+kernel=EFI/nixos/rsgdg4a94b2bmr7z59svdx60f48sl2by-linux-7.3.3-bzImage.efi
+initrd=EFI/nixos/kx0y7iblkqgfxqck62syrfhmpm70y55f-initrd-linux-7.3.3-initrd.efi
+entry=nixos-2605-probe.conf
+
+die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+
+[[ $# == 0 ]] || die "Usage: sudo bash $0"
+[[ $EUID == 0 ]] || die "Run with sudo bash $0"
+[[ -r "$system/kernel-params" ]] || die "Generation 158 is unavailable"
+
+# Validate BOTH ESPs and ALL boot artifacts before writing either entry.
+for spec in /boot:39D8-C2B4 /boot-fallback:CC3A-6251; do
+  esp=${spec%:*}
+  uuid=${spec##*:}
+  [[ $(findmnt -rn -o UUID --mountpoint "$esp") == "$uuid" ]] ||
+    die "$esp is not mounted from expected ESP $uuid"
+  [[ -f "$esp/loader/entries/nixos-generation-159.conf" ]] ||
+    die "Working generation 159 entry is missing from $esp"
+  [[ ! -e "$esp/loader/entries/$entry" ]] ||
+    die "$esp/loader/entries/$entry already exists; inspect it before replacing"
+  cmp -s "$system/kernel" "$esp/$kernel" ||
+    die "26.05 kernel on $esp differs from the store"
+  cmp -s "$system/initrd" "$esp/$initrd" ||
+    die "26.05 initrd on $esp differs from the store"
+  cmp -s \
+    /nix/store/ckb44g2gn1ma5y47kh2bhk0zximhgqyi-systemd-258.7/lib/systemd/boot/efi/systemd-bootx64.efi \
+    "$esp/EFI/BOOT/BOOTX64.EFI" ||
+    die "Fallback-path EFI loader on $esp is not the expected 258.7 binary"
+  cmp -s \
+    /nix/store/ckb44g2gn1ma5y47kh2bhk0zximhgqyi-systemd-258.7/lib/systemd/boot/efi/systemd-bootx64.efi \
+    "$esp/EFI/systemd/systemd-bootx64.efi" ||
+    die "systemd-path EFI loader on $esp is not the expected 258.7 binary"
+done
+
+params=$(< "$system/kernel-params")
+# Stage-2 masks prevent a successful probe from changing its own boot setup.
+params+=" systemd.mask=nixos-upgrade.service systemd.mask=nixos-upgrade.timer"
+params+=" systemd.mask=systemd-boot-update.service"
+# Physical supervision required: unauthenticated root shell on tty9 in initrd.
+params+=" rd.systemd.debug_shell=1 rd.systemd.log_level=debug"
+
+for esp in /boot /boot-fallback; do
+  target="$esp/loader/entries/$entry"
+  tmp=$(mktemp "$esp/loader/entries/.2605-probe.XXXXXX")
+  printf '%s\n' \
+    'title NixOS 26.05 PROBE - old EFI loader, debug shell on tty9' \
+    'sort-key recovery' \
+    "linux /$kernel" \
+    "initrd /$initrd" \
+    "options init=$system/init $params" > "$tmp"
+  mv "$tmp" "$target"
+  printf 'Installed %s\n' "$target"
+done
+sync
+
+printf '%s\n' \
+  'Verified both ESP kernels/initrds against generation 158 in the store.' \
+  'Verified both ESP EFI loaders are still systemd-boot 258.7.' \
+  'Defaults, system profile, EFI binaries and repository branch were not changed.' \
+  '' \
+  'When ready, reboot and manually select:' \
+  '  NixOS 26.05 PROBE - old EFI loader, debug shell on tty9' \
+  'Do not run nixos-rebuild before this test.' \
+  '' \
+  'If unlock fails, press Ctrl+Alt+F9. Before retrying unlock, save the journal:' \
+  '  mkdir -p /run/probe-esp' \
+  '  mount /dev/disk/by-uuid/39D8-C2B4 /run/probe-esp' \
+  '  journalctl -b -o short-monotonic --no-pager > /run/probe-esp/26.05-probe.log' \
+  '  sync' \
+  'Also photograph: systemctl --failed' \
+  '' \
+  'The probe entry enables unauthenticated initrd root access on tty9.' \
+  'Use only under physical supervision; remove it from BOTH ESPs after testing.'

@@ -33,9 +33,7 @@
   powerManagement.enable = true;
 
   # Hybrid sleep configuration: suspend first, then hibernate after delay
-  systemd.sleep.extraConfig = ''
-    HibernateDelaySec=90min
-  '';
+  systemd.sleep.settings.Sleep.HibernateDelaySec = "90min";
 
   # Configure systemd to use suspend-then-hibernate for lid close
   services.logind.settings.Login = {

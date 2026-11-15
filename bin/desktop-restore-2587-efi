@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Overlay the verified pre-rebuild ESP snapshots; no formatting or deletion.
+# From live USB, mount installed @, @nix and both ESPs, then pass /mnt/installed.
+set -euo pipefail
+umask 077
+die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+[[ $EUID == 0 && $# -ge 1 && $# -le 2 ]] ||
+  die "Usage: sudo bash $0 BACKUP_DIRECTORY [INSTALLED_ROOT_PREFIX]"
+backup=$(realpath "$1")
+prefix=${2:-}
+prefix=${prefix%/}
+[[ -z "$prefix" || "$prefix" == /* ]] || die "Root prefix must be absolute"
+[[ -f "$backup/PREPARED" ]] || die "Backup preparation did not finish"
+(
+  cd "$backup"
+  sha256sum --check SHA256SUMS
+)
+
+# Validate both mounts before writing either disk.
+for spec in /boot:39D8-C2B4 /boot-fallback:CC3A-6251; do
+  esp=$prefix${spec%:*}; uuid=${spec##*:}
+  [[ $(findmnt -rn -o UUID --mountpoint "$esp") == "$uuid" ]] ||
+    die "$esp is not mounted from expected ESP $uuid"
+  options=,$(findmnt -rn -o OPTIONS --mountpoint "$esp"),
+  [[ "$options" == *,rw,* && "$options" == *,fmask=0077,* && "$options" == *,dmask=0077,* ]] ||
+    die "Mount $esp writable with -o umask=0077 (required for FAT extraction)"
+done
+
+printf 'Restoring both ESPs from %s\n' "$backup"
+for name in boot boot-fallback; do
+  esp=$prefix/$name
+  tar -C "$esp" --extract --file="$backup/$name.tar" \
+    --no-same-owner --no-same-permissions
+  (
+    cd "$esp"
+    sha256sum --check "$backup/before/$name/files.sha256" > /dev/null
+  )
+  for loader in EFI/BOOT/BOOTX64.EFI EFI/systemd/systemd-bootx64.efi; do
+    cmp "$backup/systemd-boot-258.7.efi" "$esp/$loader"
+  done
+  # Ensure a normal, non-debug recovery default. Hold unattended changes
+  # even when falling back to old master until the repository is corrected.
+  entry=$esp/loader/entries/nixos-generation-159.conf
+  [[ -f "$entry" ]] || die "Restored generation 159 entry is missing"
+  tmp=$(mktemp "$esp/loader/entries/.restore-159.XXXXXX")
+  awk '$1 == "options" {
+    $0 = $0 " systemd.mask=nixos-upgrade.service systemd.mask=nixos-upgrade.timer systemd.mask=systemd-boot-update.service"
+  } { print }' "$entry" > "$tmp"
+  mv "$tmp" "$entry"
+  tmp=$(mktemp "$esp/loader/.restore-default.XXXXXX")
+  awk '!/^[[:space:]]*default[[:space:]]/ { print }
+    END { print "default nixos-generation-159.conf" }' "$esp/loader/loader.conf" > "$tmp"
+  mv "$tmp" "$esp/loader/loader.conf"
+done
+sync
+# This only changes menu-selection variables, never installs an EFI binary.
+if command -v bootctl > /dev/null; then
+  bootctl --esp-path="$prefix/boot" set-default nixos-generation-159.conf ||
+    printf 'WARNING: Could not set EFI default; manually select G159.\n' >&2
+  bootctl --esp-path="$prefix/boot" set-oneshot nixos-generation-159.conf ||
+    printf 'WARNING: Could not set EFI one-shot; manually select G159.\n' >&2
+fi
+printf '%s\n' \
+  'Restored and verified 258.7 EFI loaders on BOTH ESPs.' \
+  'Default: generation 159 (25.11); upgrade/update masks added to this recovery entry.' \
+  'Extra newer files were not deleted. LUKS, filesystems, repo and system profile unchanged.' \
+  'Original diagnostic entries are restored too: use only under physical supervision.' \
+  'After clean unmount (if live), boot an internal NVMe and select G159.'

@@ -275,6 +275,14 @@ attached or that a particular key is available.
   agent. Set it to the selector path or relaunch the application.
 - **No secret key:** ensure the receiver's normal public keyring has the key
   and that the provider has the matching YubiKey attached.
+- **No keybox daemon running / error opening key DB:** this is the local
+  public-key database, not the selected signing agent. `no-autostart` also
+  prevents GPG from launching `keyboxd` for homes using `use-keyboxd`.
+  The module supplies `keyboxd.socket` and `keyboxd.service` for socket
+  activation in either mode. Check `systemctl --user status keyboxd.socket
+  keyboxd.service`. Before deploying the fix, `gpgconf --launch keyboxd`
+  starts just that daemon for the current session; do not remove
+  `no-autostart` or launch all GnuPG daemons, which could steal the route.
 - **PIN prompt absent:** inspect pinentry and the provider's graphical session.
 - **Wrong mode persists:** `yubigpg use local` resets it. A mode is user-wide,
   so all ordinary GPG clients share the choice.

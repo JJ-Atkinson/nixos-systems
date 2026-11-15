@@ -84,6 +84,25 @@ in
     environment.etc."gnupg/gpg.conf".text = "no-autostart\n";
     environment.etc."gnupg/gpgsm.conf".text = "no-autostart\n";
 
+    # no-autostart also blocks the public-key database daemon for homes with
+    # use-keyboxd in common.conf (the default for new GnuPG homes). Keep it
+    # socket-activated, independently of the local/forwarded signing route.
+    systemd.user.sockets.keyboxd = {
+      description = "GnuPG public-key database";
+      wantedBy = [ "sockets.target" ];
+      socketConfig = {
+        ListenStream = "%t/gnupg/S.keyboxd";
+        SocketMode = "0600";
+        DirectoryMode = "0700";
+      };
+    };
+    systemd.user.services.keyboxd = {
+      description = "GnuPG public-key database";
+      requires = [ "keyboxd.socket" ];
+      after = [ "keyboxd.socket" ];
+      serviceConfig.ExecStart = "${config.programs.gnupg.package}/libexec/keyboxd --supervised";
+    };
+
     # Plain ssh cannot run receiver preparation before requesting its forwards.
     # OpenSSH handles stale forwarding sockets; multiplexing shares live ones.
     services.openssh.settings.StreamLocalBindUnlink = lib.mkDefault true;
